@@ -35,7 +35,7 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-app.use(express.static(path.join(__dirname, "./client/build")));
+app.use(express.static(path.join(__dirname, "client/build")));
 // Configuration
 const config = {
   // decryptionApiUrl: process.env.DECRYPTION_API_URL || 'https://hmsapiktv.kauverykonnect.com/Encryfile/api/values/decrypt',
@@ -172,8 +172,9 @@ app.post('/api/decrypt', (req, res) => {
 
 
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "client","build", "index.html"));
-});
+    res.sendFile(path.join(__dirname, "client/build", "index.html"));
+  });
+  
 // // Request logging middleware
 // app.use((req, res, next) => {
 //   const timestamp = new Date().toISOString();
