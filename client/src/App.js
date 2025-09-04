@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import VideoConsultation from "./components/VideoConsultation";
+import AppointmentService from "./utils/appointmentService";
 
 function App() {
   const [token, setToken] = useState("");
   const [appointment, setAppointment] = useState({});
   const [isTokenValid, setIsTokenValid] = useState(false);
+  const [appointmentStored, setAppointmentStored] = useState(false);
 
   // Environment validation function
   const validateEnvironment = () => {
@@ -43,8 +45,8 @@ function App() {
   // Function to decrypt encoded ID parameter by calling Express server
   const decryptParameter = async (encodedText) => {
     try {
-      const serverUrl = 'http://localhost:3001';
-      // const serverUrl='https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net';
+      // const serverUrl = 'http://localhost:3001';
+      const serverUrl='https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net';
       const apiEndpoint = `${serverUrl}/api/decrypt`;
       
       console.log('🔐 App.js: Calling /api/decrypt with params.id:', encodedText);
@@ -79,6 +81,48 @@ function App() {
     }
   };
 
+  // Function to store appointment data in database
+  const storeAppointmentData = async (appointmentData) => {
+    try {
+      console.log('📝 App.js: Storing appointment data:', appointmentData);
+      
+      // Prepare appointment data for storage
+      const appointmentToStore = {
+        app_no: appointmentData.app_no || appointmentData.appointment_id || appointmentData.id,
+        username: appointmentData.username || appointmentData.name,
+        userid: appointmentData.userid || appointmentData.user_id,
+        doctorname: appointmentData.doctorname || appointmentData.doctor_name || 'Dr. General',
+        speciality: appointmentData.speciality || appointmentData.department || 'General Medicine',
+        appointment_date: appointmentData.appointment_date || appointmentData.date || new Date().toISOString().split('T')[0],
+        appointment_time: appointmentData.appointment_time || appointmentData.time || new Date().toTimeString().split(' ')[0],
+        room_id: appointmentData.room_id || appointmentData.roomId || appointmentData.meeting_id || `ROOM_${appointmentData.app_no || appointmentData.userid}`
+      };
+
+      // Store appointment in database
+      const result = await AppointmentService.storeAppointment(appointmentToStore);
+      
+      if (result.success) {
+        setAppointmentStored(true);
+        console.log('✅ App.js: Appointment stored successfully in database');
+        
+        // Store appointment ID in session storage
+        AppointmentService.setAppointmentId(result.appointment_id);
+        
+        // Update appointment state with stored data
+        setAppointment({
+          ...appointmentToStore,
+          id: result.appointment_id
+        });
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('❌ App.js: Failed to store appointment data:', error);
+      // Don't throw error, continue with the flow
+      return { success: false, error: error.message };
+    }
+  };
+
   // Function to get query parameters
   const getQueryParams = () => {
     const params = new URLSearchParams(window.location.search);
@@ -97,6 +141,9 @@ function App() {
       userid: params.get("userid"),
       department: params.get("department"),
       doctor_name: params.get("doctor_name"),
+      speciality: params.get("speciality"),
+      appointment_date: params.get("appointment_date"),
+      appointment_time: params.get("appointment_time"),
       // Add support for single encoded ID parameter
       id: params.get("id"),
     };
@@ -122,20 +169,64 @@ function App() {
         username = urlParams.get('username') || urlParams.get('name');
         userid = urlParams.get('userid') || urlParams.get('user_id');
 
+        // Create appointment data object
+        const appointmentData = {
+          app_no: appointmentId,
+          username: username,
+          userid: userid,
+          room_id: urlParams.get('room_id') || urlParams.get('roomId') || `ROOM_${appointmentId}`,
+          doctorname: urlParams.get('doctorname') || urlParams.get('doctor_name') || 'Dr. General',
+          speciality: urlParams.get('speciality') || urlParams.get('department') || 'General Medicine',
+          appointment_date: urlParams.get('appointment_date') || urlParams.get('date') || new Date().toISOString().split('T')[0],
+          appointment_time: urlParams.get('appointment_time') || urlParams.get('time') || new Date().toTimeString().split(' ')[0]
+        };
+
+        // Store appointment data in database
+        await storeAppointmentData(appointmentData);
+
         // Create a token from the decrypted parameters
         const videoToken = `video_${appointmentId || userid}`;
         sessionStorage.setItem("authToken", videoToken);
-        sessionStorage.setItem("decryptedParams", JSON.stringify({
-          app_no: appointmentId,
-          username: username,
-          userid: userid
-        }));
+        sessionStorage.setItem("decryptedParams", JSON.stringify(appointmentData));
         setToken(videoToken);
         setIsTokenValid(true); // Set token as valid immediately after successful decryption
         console.log('🔍 App.js: Encoded ID processed successfully, setting token:', videoToken);
         
       } catch (error) {
         console.error('❌ App.js: Failed to process encoded ID:', error);
+        setIsTokenValid(false);
+      }
+    };
+
+    // Function to process direct URL parameters
+    const processDirectParams = async (params) => {
+      try {
+        console.log('🔍 App.js: Processing direct URL parameters...', params);
+        
+        // Create appointment data object from direct parameters
+        const appointmentData = {
+          app_no: params.app_no || params.appointment_id,
+          username: params.username || params.name,
+          userid: params.userid,
+          room_id: params.room_id || params.roomId || params.meeting_id || `ROOM_${params.app_no || params.userid}`,
+          doctorname: params.doctor_name || params.doctorname || 'Dr. General',
+          speciality: params.speciality || params.department || 'General Medicine',
+          appointment_date: params.appointment_date || params.date || new Date().toISOString().split('T')[0],
+          appointment_time: params.appointment_time || params.time || new Date().toTimeString().split(' ')[0]
+        };
+
+        // Store appointment data in database
+        await storeAppointmentData(appointmentData);
+
+        // Create token and set as valid
+        const videoToken = `video_${params.app_no || params.userid}`;
+        sessionStorage.setItem("authToken", videoToken);
+        setToken(videoToken);
+        setIsTokenValid(true);
+        console.log('🔍 App.js: Direct parameters processed successfully, setting token:', videoToken);
+        
+      } catch (error) {
+        console.error('❌ App.js: Failed to process direct parameters:', error);
         setIsTokenValid(false);
       }
     };
@@ -148,11 +239,7 @@ function App() {
     // Check for video consultation parameters
     else if (params.app_no && params.username && params.userid) {
       console.log('🔍 App.js: Video consultation parameters detected');
-      const videoToken = `video_${params.app_no || params.userid}`;
-      sessionStorage.setItem("authToken", videoToken);
-      setToken(videoToken);
-      setIsTokenValid(true);
-      console.log('🔍 App.js: Video consultation parameters detected, setting token:', videoToken);
+      processDirectParams(params);
     } 
     // Check for original token
     else if (params.token) {

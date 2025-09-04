@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, Component } from 'react';
 import logoImage from '../assets/25YearsLogo.png';
 import './VideoConsultation.css';
+import AppointmentService from '../utils/appointmentService';
 
 // Helper function to get Zego credentials from environment variables
 const getZegoCredentials = () => {
@@ -979,6 +980,27 @@ const VideoConsultation = () => {
 
   const handleEndCall = () => {
     console.log('🔴 End call triggered - showing leave room popup');
+    
+    // Track end call event
+    const appointmentId = AppointmentService.getAppointmentId();
+    if (appointmentId && appointmentData) {
+      // Store video call event
+      AppointmentService.storeVideoCallEvent({
+        appointment_id: parseInt(appointmentId),
+        event_type: 'end_call_requested',
+        room_id: appointmentData.roomId,
+        user_id: appointmentData.userid,
+        username: appointmentData.username,
+        event_data: {
+          timestamp: new Date().toISOString(),
+          room_id: appointmentData.roomId,
+          user_id: appointmentData.userid,
+          username: appointmentData.username,
+          action: 'user_requested_end_call'
+        }
+      }).catch(err => console.error('Failed to store video call event:', err));
+    }
+    
     setShowLeaveRoomPopup(true);
   };
 
@@ -986,6 +1008,31 @@ const VideoConsultation = () => {
     console.log('🔴 Confirming leave room');
     console.log('🔴 Setting showLeaveRoomPopup to false');
     setShowLeaveRoomPopup(false);
+    
+    // Track manual leave room event
+    const appointmentId = AppointmentService.getAppointmentId();
+    if (appointmentId && appointmentData) {
+      // End call session
+      AppointmentService.endCallSession({
+        appointment_id: parseInt(appointmentId)
+      }).catch(err => console.error('Failed to end call session:', err));
+      
+      // Store video call event
+      AppointmentService.storeVideoCallEvent({
+        appointment_id: parseInt(appointmentId),
+        event_type: 'manual_leave_room',
+        room_id: appointmentData.roomId,
+        user_id: appointmentData.userid,
+        username: appointmentData.username,
+        event_data: {
+          timestamp: new Date().toISOString(),
+          room_id: appointmentData.roomId,
+          user_id: appointmentData.userid,
+          username: appointmentData.username,
+          action: 'user_confirmed_leave'
+        }
+      }).catch(err => console.error('Failed to store video call event:', err));
+    }
     
     // Add a small delay to ensure state updates properly
     setTimeout(() => {
@@ -2731,6 +2778,34 @@ const VideoConsultation = () => {
           },
           onJoinRoom: () => {
             console.log('✅ Successfully joined Kauvery Hospital consultation room');
+            
+            // Track video call join event
+            const appointmentId = AppointmentService.getAppointmentId();
+            if (appointmentId && appointmentData) {
+              // Start call session
+              AppointmentService.startCallSession({
+                appointment_id: parseInt(appointmentId),
+                room_id: appointmentData.roomId,
+                user_id: appointmentData.userid,
+                username: appointmentData.username
+              }).catch(err => console.error('Failed to start call session:', err));
+              
+              // Store video call event
+              AppointmentService.storeVideoCallEvent({
+                appointment_id: parseInt(appointmentId),
+                event_type: 'join_room',
+                room_id: appointmentData.roomId,
+                user_id: appointmentData.userid,
+                username: appointmentData.username,
+                event_data: {
+                  timestamp: new Date().toISOString(),
+                  room_id: appointmentData.roomId,
+                  user_id: appointmentData.userid,
+                  username: appointmentData.username
+                }
+              }).catch(err => console.error('Failed to store video call event:', err));
+            }
+            
             // Use longer timeout to ensure pre-join to video transition is complete
             setTimeout(() => {
               setZegoInitialized(true);
@@ -2739,6 +2814,31 @@ const VideoConsultation = () => {
           },
           onLeaveRoom: () => {
             console.log('👋 Left consultation room');
+            
+            // Track video call leave event
+            const appointmentId = AppointmentService.getAppointmentId();
+            if (appointmentId && appointmentData) {
+              // End call session
+              AppointmentService.endCallSession({
+                appointment_id: parseInt(appointmentId)
+              }).catch(err => console.error('Failed to end call session:', err));
+              
+              // Store video call event
+              AppointmentService.storeVideoCallEvent({
+                appointment_id: parseInt(appointmentId),
+                event_type: 'leave_room',
+                room_id: appointmentData.roomId,
+                user_id: appointmentData.userid,
+                username: appointmentData.username,
+                event_data: {
+                  timestamp: new Date().toISOString(),
+                  room_id: appointmentData.roomId,
+                  user_id: appointmentData.userid,
+                  username: appointmentData.username
+                }
+              }).catch(err => console.error('Failed to store video call event:', err));
+            }
+            
             setZegoInitialized(false);
             setCallEnded(true);
             zegoInstanceRef.current = null;
