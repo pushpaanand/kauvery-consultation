@@ -523,19 +523,17 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
-app.get("/*", (req, res) => {
-  res.sendFile(path.join(__dirname, "client/build", "index.html"));
-});
+
 
 // Start server and connect to database
 async function startServer() {
   try {
     await connectDB();
     
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Database connected: ${dbConfig.database}`);
-    });
+    // app.listen(PORT, () => {
+    //   console.log(`🚀 Server running on port ${PORT}`);
+    //   console.log(`📊 Database connected: ${dbConfig.database}`);
+    // });
   } catch (err) {
     console.error('❌ Failed to start server:', err);
     process.exit(1);
@@ -543,5 +541,14 @@ async function startServer() {
 }
 
 startServer();
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "client/build", "index.html"));
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Database connected: ${dbConfig.database}`);
+});
 
 module.exports = app;
