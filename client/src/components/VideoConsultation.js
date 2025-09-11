@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, Component } from 'react';
 import logoImage from '../assets/25YearsLogo.png';
 import './VideoConsultation.css';
 import AppointmentService from '../utils/appointmentService';
+import ZegoUIKitPrebuilt from '@zegocloud/zego-uikit-prebuilt';
 
 // Helper function to get Zego credentials from environment variables
 const getZegoCredentials = () => {
@@ -366,6 +367,12 @@ const VideoConsultation = () => {
   const [decodingError, setDecodingError] = useState(null);
   const [showLeaveRoomPopup, setShowLeaveRoomPopup] = useState(false);
   const [showHealthPackages, setShowHealthPackages] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [reconnectCount, setReconnectCount] = useState(0);
+  const [participantCount, setParticipantCount] = useState(0);
+  const [sessionId, setSessionId] = useState(null);
+  const [connectionStartTime, setConnectionStartTime] = useState(null);
+  const [appointmentStored, setAppointmentStored] = useState(false);
 
   // Monitor health packages state changes
   React.useEffect(() => {
@@ -1499,44 +1506,38 @@ const VideoConsultation = () => {
       const audioElements = document.querySelectorAll('audio');
       
       // Count active participants
-      let participantCount = 0;
+      let currentParticipantCount = participantCount; // Use the state variable from onUserUpdate
       let participantNames = [];
       
-      // Check for Zego's internal participant tracking
-      if (zegoInstanceRef.current) {
-        try {
-          // Try to get participants from Zego instance
-          const roomInfo = zegoInstanceRef.current.getRoomInfo ? zegoInstanceRef.current.getRoomInfo() : null;
-          if (roomInfo && roomInfo.participants) {
-            participantCount = roomInfo.participants.length;
-            participantNames = roomInfo.participants.map(p => p.userName || p.name || 'Unknown User');
-          }
-        } catch (error) {
-          console.log('⚠️ Could not get room info from Zego instance:', error.message);
+      // Try to extract names from DOM for display purposes only
+      zegoUserNames.forEach(nameElement => {
+        const name = nameElement.textContent?.trim();
+        if (name && name !== 'You' && name !== 'Me' && !participantNames.includes(name)) {
+          participantNames.push(name);
         }
-      }
-      
-      // Fallback: Count based on DOM elements
-      if (participantCount === 0) {
-        // Count unique video/audio elements (excluding our own)
-        const mediaElements = [...videoElements, ...audioElements];
-        participantCount = mediaElements.length;
-        
-        // Try to extract names from DOM
-        zegoUserNames.forEach(nameElement => {
-          const name = nameElement.textContent?.trim();
-          if (name && name !== 'You' && name !== 'Me' && !participantNames.includes(name)) {
-            participantNames.push(name);
-          }
-        });
-      }
+      });
       
       // Update status display
-      if (participantCount === 0) {
-        statusText.textContent = 'No other participants in room yet';
+      if (currentParticipantCount === 0) {
+        statusText.textContent = 'No one else in the room';
         participantsList.style.display = 'none';
       } else {
-        statusText.textContent = `${participantCount} participant${participantCount > 1 ? 's' : ''} in room`;
+        // Show participant names in status
+        if (participantNames.length > 0) {
+          if (participantNames.length === 1) {
+            statusText.textContent = `${participantNames[0]} is in the room`;
+          } else {
+            const lastParticipant = participantNames[participantNames.length - 1];
+            const otherParticipants = participantNames.slice(0, -1);
+            if (otherParticipants.length === 1) {
+              statusText.textContent = `${otherParticipants[0]} and ${lastParticipant} are in the room`;
+            } else {
+              statusText.textContent = `${otherParticipants.join(', ')}, and ${lastParticipant} are in the room`;
+            }
+          }
+        } else {
+          statusText.textContent = `${currentParticipantCount} participant${currentParticipantCount > 1 ? 's' : ''} in room`;
+        }
         participantsList.style.display = 'flex';
         
         // Clear existing list
@@ -2604,7 +2605,6 @@ const VideoConsultation = () => {
       
               // Make functions globally available for debugging
         window.customizePreJoinView = customizePreJoinView;
-        // window.createFloatingParticipantInfo = createFloatingParticipantInfo; // Disabled to prevent duplicates
         window.forceUpdateTitleColor = forceUpdateTitleColor;
         window.handleEndCall = handleEndCall;
         console.log('🔧 Debug functions available: customizePreJoinView(), forceUpdateTitleColor(), handleEndCall()');
@@ -2701,6 +2701,14 @@ const VideoConsultation = () => {
       
       console.log('🔍 Debug: Generating kit token...');
       
+      // Add debugging before token generation (around line 2700)
+      console.log('🔍 Debug: Token generation parameters:');
+      console.log('🔍 - numericAppID:', numericAppID);
+      console.log('🔍 - serverSecret:', serverSecret ? 'exists' : 'missing');
+      console.log('🔍 - roomId:', appointmentData.roomId);
+      console.log('🔍 - userid:', appointmentData.userid);
+      console.log('🔍 - username:', appointmentData.username);
+      
       // Try different token generation methods
       let kitToken;
       if (ZegoUIKitPrebuilt.generateKitTokenForTest) {
@@ -2709,7 +2717,7 @@ const VideoConsultation = () => {
           serverSecret, 
           appointmentData.roomId, 
           appointmentData.userid, 
-          appointmentData.username
+          appointmentData.username || 'Patient' // Add fallback
         );
       } else if (ZegoUIKitPrebuilt.generateKitToken) {
         kitToken = ZegoUIKitPrebuilt.generateKitToken(
@@ -2717,7 +2725,7 @@ const VideoConsultation = () => {
           serverSecret, 
           appointmentData.roomId, 
           appointmentData.userid, 
-          appointmentData.username
+          appointmentData.username || 'Patient' // Add fallback
         );
       } else {
         throw new Error('No token generation method found in ZegoUIKitPrebuilt');
@@ -2779,16 +2787,22 @@ const VideoConsultation = () => {
           onJoinRoom: () => {
             console.log('✅ Successfully joined Kauvery Hospital consultation room');
             
-            // Track video call join event
+            // Track connection event
+            handleConnectionEvent('connected', { 
+              room_id: appointmentData.roomId,
+              join_time: new Date().toISOString()
+            });
+            
+            // Track video call join event (existing code)
             const appointmentId = AppointmentService.getAppointmentId();
             if (appointmentId && appointmentData) {
               // Start call session
-              AppointmentService.startCallSession({
-                appointment_id: parseInt(appointmentId),
-                room_id: appointmentData.roomId,
-                user_id: appointmentData.userid,
-                username: appointmentData.username
-              }).catch(err => console.error('Failed to start call session:', err));
+              // AppointmentService.startCallSession({
+              //   appointment_id: parseInt(appointmentId),
+              //   room_id: appointmentData.roomId,
+              //   user_id: appointmentData.userid,
+              //   username: appointmentData.username
+              // }).catch(err => console.error('Failed to start call session:', err));
               
               // Store video call event
               AppointmentService.storeVideoCallEvent({
@@ -2815,7 +2829,13 @@ const VideoConsultation = () => {
           onLeaveRoom: () => {
             console.log('👋 Left consultation room');
             
-            // Track video call leave event
+            // Track connection event
+            handleConnectionEvent('disconnected', { 
+              room_id: appointmentData.roomId,
+              leave_time: new Date().toISOString()
+            });
+            
+            // Track video call leave event (existing code)
             const appointmentId = AppointmentService.getAppointmentId();
             if (appointmentId && appointmentData) {
               // End call session
@@ -2856,6 +2876,70 @@ const VideoConsultation = () => {
         },
         onJoinRoomSuccess: () => {
           console.log('🎉 Join room success - transitioning to video interface');
+        },
+        // Additional event listeners for connection tracking
+        onUserUpdate: (userList) => {
+          console.log('👥 User list updated:', userList);
+          setParticipantCount(userList.length);
+          
+          // Check if both patient and doctor are in the room (2 or more participants)
+          if (userList.length >= 2 && !appointmentStored && appointmentData) {
+            console.log('👥 Both patient and doctor are in the room - storing appointment data');
+            
+            // Store appointment data when both participants are connected
+            const appointmentToStore = {
+              app_no: appointmentData.app_no,
+              username: appointmentData.username,
+              userid: appointmentData.userid,
+              doctorname: appointmentData.doctorname || 'Dr. Smith', // Default if not provided
+              speciality: appointmentData.speciality || 'General Medicine', // Default if not provided
+              appointment_date: appointmentData.appointment_date || new Date().toISOString().split('T')[0],
+              appointment_time: appointmentData.appointment_time || new Date().toTimeString().split(' ')[0]
+            };
+            
+            AppointmentService.storeAppointment(appointmentToStore)
+              .then(result => {
+                console.log('✅ Appointment stored successfully when both participants joined:', result);
+                setAppointmentStored(true);
+                
+                // Store appointment ID for future use
+                if (result.appointment_id) {
+                  AppointmentService.setAppointmentId(result.appointment_id);
+                }
+              })
+              .catch(err => {
+                console.error('❌ Failed to store appointment when both participants joined:', err);
+              });
+          }
+          
+          trackVideoCallEvent('user_update', { 
+            user_count: userList.length,
+            users: userList.map(u => ({ id: u.userID, name: u.userName }))
+          });
+        },
+        
+        onRoomStateUpdate: (roomState) => {
+          console.log('🏠 Room state updated:', roomState);
+          
+          if (roomState.reason === 'Reconnecting' || roomState.reason === 'RECONNECTING') {
+            handleConnectionEvent('reconnecting', { 
+              room_state: roomState,
+              reconnect_time: new Date().toISOString()
+            });
+          } else if (roomState.reason === 'Reconnected' || roomState.reason === 'RECONNECTED') {
+            handleConnectionEvent('reconnected', { 
+              room_state: roomState,
+              reconnected_time: new Date().toISOString()
+            });
+          }
+        },
+        
+        onNetworkQuality: (quality) => {
+          console.log('📶 Network quality:', quality);
+          trackVideoCallEvent('network_quality_update', { 
+            quality: quality,
+            timestamp: new Date().toISOString()
+          });
         }
         });
               console.log('🔍 Debug: zp.joinRoom completed successfully');
@@ -3647,6 +3731,207 @@ const VideoConsultation = () => {
     );
   }
 
+  // Connection status indicator component
+  const ConnectionStatusIndicator = () => {
+    const getStatusColor = () => {
+      switch (connectionStatus) {
+        case 'connected': return '#4CAF50';
+        case 'disconnected': return '#F44336';
+        case 'reconnecting': return '#FF9800';
+        case 'failed': return '#F44336';
+        default: return '#9E9E9E';
+      }
+    };
+
+    const getStatusText = () => {
+      switch (connectionStatus) {
+        case 'connected': return 'Connected';
+        case 'disconnected': return 'Disconnected';
+        case 'reconnecting': return `Reconnecting... (${reconnectCount})`;
+        case 'failed': return 'Connection Failed';
+        default: return 'Unknown';
+      }
+    };
+
+    return (
+      <div style={{
+        position: 'absolute',
+        top: '10px',
+        right: '10px',
+        background: 'rgba(0,0,0,0.7)',
+        color: 'white',
+        padding: '8px 12px',
+        borderRadius: '20px',
+        fontSize: '12px',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        <div style={{
+          width: '8px',
+          height: '8px',
+          borderRadius: '50%',
+          backgroundColor: getStatusColor()
+        }}></div>
+        {getStatusText()}
+        {participantCount > 0 && (
+          <span style={{ marginLeft: '8px' }}>
+            👥 {participantCount} participant{participantCount > 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  // Function to track video call events
+  const trackVideoCallEvent = async (eventType, eventData = {}) => {
+    try {
+      const eventPayload = {
+        appointment_id: appointmentData?.id,
+        event_type: eventType,
+        event_timestamp: new Date().toISOString(),
+        event_data: JSON.stringify(eventData),
+        room_id: appointmentData?.roomId,
+        user_id: appointmentData?.userid,
+        username: appointmentData?.username
+      };
+
+      console.log(`📹 Tracking ${eventType} event:`, eventPayload);
+      await AppointmentService.storeVideoCallEvent(eventPayload);
+    } catch (error) {
+      console.error(`❌ Failed to track ${eventType} event:`, error);
+    }
+  };
+
+  // Function to start call session
+  const startCallSession = async () => {
+    try {
+      const sessionData = {
+        appointment_id: appointmentData?.id,
+        session_start: new Date().toISOString(),
+        room_id: appointmentData?.roomId,
+        user_id: appointmentData?.userid,
+        username: appointmentData?.username,
+        status: 'active'
+      };
+
+      console.log('🎬 Starting call session:', sessionData);
+      const result = await AppointmentService.startCallSession(sessionData);
+      
+      if (result.success) {
+        setSessionId(result.session_id);
+        setConnectionStartTime(new Date());
+        setConnectionStatus('connected');
+        console.log('✅ Call session started successfully');
+      }
+    } catch (error) {
+      console.error('❌ Failed to start call session:', error);
+    }
+  };
+
+  // Function to end call session
+  const endCallSession = async (reason = 'manual_end') => {
+    try {
+      const sessionData = {
+        appointment_id: appointmentData?.id,
+        session_end: new Date().toISOString(),
+        room_id: appointmentData?.roomId,
+        user_id: appointmentData?.userid,
+        username: appointmentData?.username,
+        status: 'ended',
+        end_reason: reason
+      };
+
+      console.log('🏁 Ending call session:', sessionData);
+      const result = await AppointmentService.endCallSession(sessionData);
+      
+      if (result.success) {
+        setConnectionStatus('disconnected');
+        setConnectionStartTime(null);
+        setSessionId(null);
+        console.log('✅ Call session ended successfully');
+      }
+    } catch (error) {
+      console.error('❌ Failed to end call session:', error);
+    }
+  };
+
+  // Function to handle connection events
+  const handleConnectionEvent = (eventType, eventData = {}) => {
+    console.log(`🔗 Connection event: ${eventType}`, eventData);
+    
+    switch (eventType) {
+      case 'connected':
+        setConnectionStatus('connected');
+        setConnectionStartTime(new Date());
+        setReconnectCount(0);
+        trackVideoCallEvent('connect', {
+          ...eventData,
+          connection_time: new Date().toISOString()
+        });
+        break;
+        
+      case 'disconnected':
+        setConnectionStatus('disconnected');
+        if (connectionStartTime) {
+          const duration = Math.floor((new Date() - connectionStartTime) / 1000);
+          trackVideoCallEvent('disconnect', {
+            ...eventData,
+            duration_seconds: duration,
+            disconnect_time: new Date().toISOString()
+          });
+        }
+        endCallSession('disconnected');
+        break;
+        
+      case 'reconnecting':
+        setConnectionStatus('reconnecting');
+        setReconnectCount(prev => prev + 1);
+        trackVideoCallEvent('reconnect_attempt', {
+          ...eventData,
+          reconnect_count: reconnectCount + 1,
+          reconnect_time: new Date().toISOString()
+        });
+        break;
+        
+      case 'reconnected':
+        setConnectionStatus('connected');
+        trackVideoCallEvent('reconnect_success', {
+          ...eventData,
+          reconnect_count: reconnectCount,
+          reconnect_time: new Date().toISOString()
+        });
+        break;
+        
+      case 'connection_failed':
+        setConnectionStatus('failed');
+        trackVideoCallEvent('connection_failed', {
+          ...eventData,
+          failure_time: new Date().toISOString()
+        });
+        break;
+        
+      case 'user_joined':
+        setParticipantCount(prev => prev + 1);
+        trackVideoCallEvent('user_joined', {
+          ...eventData,
+          participant_count: participantCount + 1,
+          join_time: new Date().toISOString()
+        });
+        break;
+        
+      case 'user_left':
+        setParticipantCount(prev => Math.max(0, prev - 1));
+        trackVideoCallEvent('user_left', {
+          ...eventData,
+          participant_count: Math.max(0, participantCount - 1),
+          leave_time: new Date().toISOString()
+        });
+        break;
+    }
+  };
+
   return (
     <div style={styles.body}>
       {/* Compact Header */}
@@ -3675,9 +3960,10 @@ const VideoConsultation = () => {
         </div>
       </div>
 
+      {/* Connection Status Indicator */}
+      <ConnectionStatusIndicator />
 
-
-            {/* Zego Video Container with Error Boundary */}
+      {/* Zego Video Container with Error Boundary */}
       <VideoErrorBoundary>
         <ZegoVideoInterface 
           containerRef={zegoContainerRef}
@@ -3686,8 +3972,8 @@ const VideoConsultation = () => {
           appointmentData={appointmentData}
           onRetry={() => {
             setInitializationError(null);
-            setZegoInitialized(false);
-            zegoInstanceRef.current = null;
+          setZegoInitialized(false);
+          zegoInstanceRef.current = null;
             initializeZego().catch(console.error);
           }}
           showLeaveRoomPopup={showLeaveRoomPopup}
@@ -3700,8 +3986,6 @@ const VideoConsultation = () => {
       <div style={styles.notification}>
         <span>{notification.message}</span>
       </div>
-
-
 
       {/* Footer */}
       <div style={{

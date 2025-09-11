@@ -8,6 +8,11 @@ function App() {
   const [appointment, setAppointment] = useState({});
   const [isTokenValid, setIsTokenValid] = useState(false);
   const [appointmentStored, setAppointmentStored] = useState(false);
+  
+  // New states for real-time decryption flow
+  const [isDecrypting, setIsDecrypting] = useState(false);
+  const [decryptionComplete, setDecryptionComplete] = useState(false);
+  const [decryptionError, setDecryptionError] = useState(null);
 
   // Environment validation function
   const validateEnvironment = () => {
@@ -45,38 +50,35 @@ function App() {
   // Function to decrypt encoded ID parameter by calling Express server
   const decryptParameter = async (encodedText) => {
     try {
-      // const serverUrl = 'http://localhost:3001';
-      const serverUrl='https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net';
+      const serverUrl = 'http://localhost:3001';
       const apiEndpoint = `${serverUrl}/api/decrypt`;
       
-      console.log('🔐 App.js: Calling /api/decrypt with params.id:', encodedText);
+      console.log('🔐 App.js: Calling decrypt API with:', encodedText);
       console.log('🔐 App.js: API endpoint:', apiEndpoint);
       
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
         },
         body: JSON.stringify({
-          text: encodedText
-        })
+          text: encodedText  // Make sure it's 'text', not 'encryptedText'
+        }),
       });
+  
+      console.log('🔐 App.js: Response status:', response.status);
       
       if (!response.ok) {
-        throw new Error(`Server error: ${response.status} - ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('❌ App.js: Server error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
       
-      const result = await response.json();
-      console.log('✅ App.js: Received response from /api/decrypt:', result);
-      
-      if (result.success && result.decryptedText) {
-        return result.decryptedText;
-      } else {
-        return result;
-      }
-      
+      const data = await response.json();
+      console.log('✅ App.js: Decryption successful:', data);
+      return data.decryptedText;
     } catch (error) {
+      console.error('❌ App.js: Decryption failed:', error);
       throw error;
     }
   };
@@ -84,18 +86,19 @@ function App() {
   // Function to store appointment data in database
   const storeAppointmentData = async (appointmentData) => {
     try {
-      console.log('📝 App.js: Storing appointment data:', appointmentData);
+      console.log('💾 App.js: Storing appointment data:', appointmentData);
       
-      // Prepare appointment data for storage
+      // Prepare appointment data for storage - only the 3 required parameters + defaults
       const appointmentToStore = {
-        app_no: appointmentData.app_no || appointmentData.appointment_id || appointmentData.id,
-        username: appointmentData.username || appointmentData.name,
-        userid: appointmentData.userid || appointmentData.user_id,
-        doctorname: appointmentData.doctorname || appointmentData.doctor_name || 'Dr. General',
-        speciality: appointmentData.speciality || appointmentData.department || 'General Medicine',
-        appointment_date: appointmentData.appointment_date || appointmentData.date || new Date().toISOString().split('T')[0],
-        appointment_time: appointmentData.appointment_time || appointmentData.time || new Date().toTimeString().split(' ')[0],
-        room_id: appointmentData.room_id || appointmentData.roomId || appointmentData.meeting_id || `ROOM_${appointmentData.app_no || appointmentData.userid}`
+        app_no: appointmentData.app_no,
+        username: appointmentData.username,
+        userid: appointmentData.userid,
+        // Set default values for other fields (hidden for now)
+        room_id: `ROOM_${appointmentData.app_no}`,
+        doctorname: 'Dr. General',
+        speciality: 'General Medicine',
+        appointment_date: new Date().toISOString().split('T')[0],
+        appointment_time: new Date().toTimeString().split(' ')[0]
       };
 
       // Store appointment in database
@@ -113,12 +116,13 @@ function App() {
           ...appointmentToStore,
           id: result.appointment_id
         });
+      } else {
+        console.error('❌ App.js: Failed to store appointment:', result.error);
       }
       
       return result;
     } catch (error) {
       console.error('❌ App.js: Failed to store appointment data:', error);
-      // Don't throw error, continue with the flow
       return { success: false, error: error.message };
     }
   };
@@ -128,24 +132,18 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     console.log('🔍 App.js: Query params:', params);
     return {
+      // Only the 3 required parameters
+      app_no: params.get("app_no"),
+      username: params.get("username"),
+      userid: params.get("userid"),
+      // Keep encrypted ID parameter for decryption
+      id: params.get("id"),
+      // Keep token for backward compatibility
       token: params.get("token"),
+      // Keep legacy parameters for backward compatibility
       name: params.get("name"),
       date: params.get("date"),
       time: params.get("time"),
-      // Add support for video consultation parameters
-      app_no: params.get("app_no"),
-      appointment_id: params.get("appointment_id"),
-      meeting_id: params.get("meeting_id"),
-      room_id: params.get("room_id"),
-      username: params.get("username"),
-      userid: params.get("userid"),
-      department: params.get("department"),
-      doctor_name: params.get("doctor_name"),
-      speciality: params.get("speciality"),
-      appointment_date: params.get("appointment_date"),
-      appointment_time: params.get("appointment_time"),
-      // Add support for single encoded ID parameter
-      id: params.get("id"),
     };
   };
 
@@ -153,92 +151,104 @@ function App() {
     const params = getQueryParams();
 
     // Function to process encoded ID parameter
-    const processEncodedId = async () => {
+    const processEncodedId = async (encryptedId) => {
       try {
-        console.log('🔐 App.js: Processing encoded ID parameter...', params.id);
+        setIsDecrypting(true);
+        setDecryptionError(null);
+        console.log(' App.js: Processing encoded ID parameter...', encryptedId);
         
         // Decrypt the single encoded ID
-        const decryptedId = await decryptParameter(params.id);
-        let appointmentId, username, userid;
-        
+        const decryptedId = await decryptParameter(encryptedId);
         console.log('🔍 App.js: Decrypted data:', decryptedId);
         
-        // Parse URL query string format: "app_no=TEST123&room_id=ROOM1&username=TestUser&userid=USER1"
+        // Parse the decrypted string to get actual appointment data
         const urlParams = new URLSearchParams(decryptedId);
-        appointmentId = urlParams.get('app_no') || urlParams.get('appointmentId') || urlParams.get('id');
-        username = urlParams.get('username') || urlParams.get('name');
-        userid = urlParams.get('userid') || urlParams.get('user_id');
+        const appointmentId = urlParams.get('app_no') || urlParams.get('appointmentId') || urlParams.get('id');
+        const username = urlParams.get('username') || urlParams.get('name');
+        const userid = urlParams.get('userid') || urlParams.get('user_id');
 
-        // Create appointment data object
+        // Create appointment data object with only the 3 required parameters + defaults
         const appointmentData = {
           app_no: appointmentId,
           username: username,
           userid: userid,
-          room_id: urlParams.get('room_id') || urlParams.get('roomId') || `ROOM_${appointmentId}`,
-          doctorname: urlParams.get('doctorname') || urlParams.get('doctor_name') || 'Dr. General',
-          speciality: urlParams.get('speciality') || urlParams.get('department') || 'General Medicine',
-          appointment_date: urlParams.get('appointment_date') || urlParams.get('date') || new Date().toISOString().split('T')[0],
-          appointment_time: urlParams.get('appointment_time') || urlParams.get('time') || new Date().toTimeString().split(' ')[0]
-        };
-
-        // Store appointment data in database
-        await storeAppointmentData(appointmentData);
-
-        // Create a token from the decrypted parameters
-        const videoToken = `video_${appointmentId || userid}`;
-        sessionStorage.setItem("authToken", videoToken);
-        sessionStorage.setItem("decryptedParams", JSON.stringify(appointmentData));
-        setToken(videoToken);
-        setIsTokenValid(true); // Set token as valid immediately after successful decryption
-        console.log('🔍 App.js: Encoded ID processed successfully, setting token:', videoToken);
-        
-      } catch (error) {
-        console.error('❌ App.js: Failed to process encoded ID:', error);
-        setIsTokenValid(false);
-      }
-    };
-
-    // Function to process direct URL parameters
-    const processDirectParams = async (params) => {
-      try {
-        console.log('🔍 App.js: Processing direct URL parameters...', params);
-        
-        // Create appointment data object from direct parameters
-        const appointmentData = {
-          app_no: params.app_no || params.appointment_id,
-          username: params.username || params.name,
-          userid: params.userid,
-          room_id: params.room_id || params.roomId || params.meeting_id || `ROOM_${params.app_no || params.userid}`,
-          doctorname: params.doctor_name || params.doctorname || 'Dr. General',
-          speciality: params.speciality || params.department || 'General Medicine',
-          appointment_date: params.appointment_date || params.date || new Date().toISOString().split('T')[0],
-          appointment_time: params.appointment_time || params.time || new Date().toTimeString().split(' ')[0]
+          // Set default values for other fields (hidden for now)
+          room_id: `ROOM_${appointmentId}`,
+          doctorname: 'Dr. General',
+          speciality: 'General Medicine',
+          appointment_date: new Date().toISOString().split('T')[0],
+          appointment_time: new Date().toTimeString().split(' ')[0]
         };
 
         // Store appointment data in database
         await storeAppointmentData(appointmentData);
 
         // Create token and set as valid
-        const videoToken = `video_${params.app_no || params.userid}`;
+        const videoToken = `video_${appointmentId || userid}`;
         sessionStorage.setItem("authToken", videoToken);
+        sessionStorage.setItem("decryptedParams", JSON.stringify(appointmentData));
         setToken(videoToken);
         setIsTokenValid(true);
-        console.log('🔍 App.js: Direct parameters processed successfully, setting token:', videoToken);
+        setDecryptionComplete(true);
+        setIsDecrypting(false);
+        console.log('✅ App.js: Encoded ID processed successfully, setting token:', videoToken);
         
       } catch (error) {
-        console.error('❌ App.js: Failed to process direct parameters:', error);
+        console.error('❌ App.js: Failed to process encoded ID:', error);
+        setDecryptionError(error.message);
+        setIsDecrypting(false);
         setIsTokenValid(false);
       }
     };
 
-    // Check for encoded ID parameter first (highest priority)
+    // Function to process direct URL parameters
+    const processDirectParams = async (directParams) => {
+      try {
+        setIsDecrypting(true);
+        setDecryptionError(null);
+        console.log(' App.js: Processing direct URL parameters...', directParams);
+        
+        // Create appointment data object with only the 3 required parameters + defaults
+        const appointmentData = {
+          app_no: directParams.app_no || directParams.appointment_id,
+          username: directParams.username || directParams.name,
+          userid: directParams.userid,
+          // Set default values for other fields (hidden for now)
+          room_id: `ROOM_${directParams.app_no || directParams.userid}`,
+          doctorname: 'Dr. General',
+          speciality: 'General Medicine',
+          appointment_date: new Date().toISOString().split('T')[0],
+          appointment_time: new Date().toTimeString().split(' ')[0]
+        };
+
+        // Store appointment data in database
+        await storeAppointmentData(appointmentData);
+
+        // Create token and set as valid
+        const videoToken = `video_${directParams.app_no || directParams.userid}`;
+        sessionStorage.setItem("authToken", videoToken);
+        setToken(videoToken);
+        setIsTokenValid(true);
+        setDecryptionComplete(true);
+        setIsDecrypting(false);
+        console.log('✅ App.js: Direct parameters processed successfully, setting token:', videoToken);
+        
+      } catch (error) {
+        console.error('❌ App.js: Failed to process direct parameters:', error);
+        setDecryptionError(error.message);
+        setIsDecrypting(false);
+        setIsTokenValid(false);
+      }
+    };
+
+    // Main processing logic - Check for encrypted parameter first (highest priority)
     if (params.id) {
-      console.log('🔍 App.js: Encoded ID parameter detected');
-      processEncodedId();
+      console.log(' App.js: Encoded ID parameter detected, decrypting...');
+      processEncodedId(params.id); // Pass the encrypted ID directly
     }
-    // Check for video consultation parameters
+    // Check for video consultation parameters (direct parameters)
     else if (params.app_no && params.username && params.userid) {
-      console.log('🔍 App.js: Video consultation parameters detected');
+      console.log('🔍 App.js: Direct video consultation parameters detected');
       processDirectParams(params);
     } 
     // Check for original token
@@ -247,6 +257,7 @@ function App() {
       sessionStorage.setItem("authToken", params.token);
       setToken(params.token);
       setIsTokenValid(true);
+      setDecryptionComplete(true);
     } 
     // Check for saved token
     else {
@@ -254,13 +265,16 @@ function App() {
       if (savedToken) {
         setToken(savedToken);
         setIsTokenValid(true);
+        setDecryptionComplete(true);
         console.log('🔍 App.js: Using saved token');
       } else {
         console.log('🔍 App.js: No valid parameters found');
         setIsTokenValid(false);
+        setDecryptionComplete(true);
       }
     }
 
+    // Handle legacy appointment data
     if (params.name && params.date && params.time) {
       setAppointment({
         name: params.name,
@@ -270,31 +284,123 @@ function App() {
     }
   }, []);
 
-  // Validate URL parameters and token - Simplified validation
-  useEffect(() => {
-    const params = getQueryParams();
-    
-    // Check if ANY URL parameters exist
-    const hasUrlParams = Object.values(params).some(param => param !== null && param !== '');
-    
-    if (!hasUrlParams) {
-      // No URL parameters at all - show Access Denied
-      console.log('🔍 App.js: No URL parameters found - showing Access Denied');
-      setIsTokenValid(false);
-    }
-    // Token validity is now set directly in the parameter processing functions
-  }, []);
+  // Loading component for decryption process
+  const LoadingScreen = () => (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100vh',
+      backgroundColor: '#f0f2f5',
+      fontFamily: 'Arial, sans-serif'
+    }}>
+      <div style={{
+        textAlign: 'center',
+        padding: '40px',
+        backgroundColor: 'white',
+        borderRadius: '10px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        maxWidth: '400px',
+        width: '90%'
+      }}>
+        <div style={{
+          width: '50px',
+          height: '50px',
+          border: '4px solid #f3f3f3',
+          borderTop: '4px solid #3498db',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          margin: '0 auto 20px'
+        }}></div>
+        <h2 style={{ color: '#333', marginBottom: '10px' }}>Processing Your Appointment</h2>
+        <p style={{ color: '#666', marginBottom: '20px' }}>
+          {isDecrypting ? 'Decrypting appointment details...' : 'Preparing video consultation...'}
+        </p>
+        <div style={{ fontSize: '14px', color: '#999' }}>
+          Please wait while we set up your consultation room
+        </div>
+      </div>
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+
+  // Error component for decryption failures
+  const ErrorScreen = () => (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100vh',
+      backgroundColor: '#f0f2f5',
+      fontFamily: 'Arial, sans-serif'
+    }}>
+      <div style={{
+        textAlign: 'center',
+        padding: '40px',
+        backgroundColor: 'white',
+        borderRadius: '10px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        maxWidth: '400px',
+        width: '90%'
+      }}>
+        <div style={{
+          width: '50px',
+          height: '50px',
+          backgroundColor: '#e74c3c',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto 20px',
+          fontSize: '24px',
+          color: 'white'
+        }}>⚠️</div>
+        <h2 style={{ color: '#e74c3c', marginBottom: '10px' }}>Access Denied</h2>
+        <p style={{ color: '#666', marginBottom: '20px' }}>
+          {decryptionError || 'Invalid appointment parameters. Please check your link and try again.'}
+        </p>
+        <button 
+          onClick={() => window.location.reload()} 
+          style={{
+            backgroundColor: '#3498db',
+            color: 'white',
+            border: 'none',
+            padding: '10px 20px',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '16px'
+          }}
+        >
+          Try Again
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <BrowserRouter>
       <Routes>
-        {/* All routes check token validation and show VideoConsultation if valid */}
+        {/* Home route */}
         <Route 
           path="/" 
           element={
-            isTokenValid ? (
-              <VideoConsultation />
+            // Show loading screen while decrypting
+            isDecrypting ? (
+              <LoadingScreen />
+            ) : decryptionError ? (
+              <ErrorScreen />
+            ) : decryptionComplete && isTokenValid ? (
+              // Redirect to video consultation after successful decryption
+              <Navigate to="/consultation" replace />
             ) : (
+              // Show original Access Denied page if no valid parameters
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -377,8 +483,6 @@ function App() {
                       <li><strong>userid</strong> - User ID</li>
                     </ul>
                   </div>
-                  
-
                 </div>
                 
                 {/* Footer */}
@@ -464,7 +568,11 @@ function App() {
         <Route 
           path="/patient" 
           element={
-            isTokenValid ? (
+            isDecrypting ? (
+              <LoadingScreen />
+            ) : decryptionError ? (
+              <ErrorScreen />
+            ) : decryptionComplete && isTokenValid ? (
               <VideoConsultation />
             ) : (
               <Navigate to="/" replace />
@@ -476,7 +584,11 @@ function App() {
         <Route 
           path="/consultation" 
           element={
-            isTokenValid ? (
+            isDecrypting ? (
+              <LoadingScreen />
+            ) : decryptionError ? (
+              <ErrorScreen />
+            ) : decryptionComplete && isTokenValid ? (
               <VideoConsultation />
             ) : (
               <Navigate to="/" replace />

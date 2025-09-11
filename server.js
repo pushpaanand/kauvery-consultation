@@ -3,21 +3,33 @@ const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
 const sql = require('mssql');
+const { DefaultAzureCredential, ClientSecretCredential } = require('@azure/identity');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Database configuration
+// Load environment variables
+require('dotenv').config();
+
+// Database configuration for Azure SQL Database
 const dbConfig = {
-  server: process.env.DB_SERVER || 'your-azure-server.database.windows.net',
-  database: process.env.DB_NAME || 'your-database-name',
-  user: process.env.DB_USER || 'your-username',
-  password: process.env.DB_PASSWORD || 'your-password',
+  server: process.env.DB_SERVER || 'videoconsultation.database.windows.net',
+  database: process.env.DB_NAME || 'videoconsultation_db',
+  user: process.env.DB_USER || 'videoconsultation', // Updated username
+  password: process.env.DB_PASSWORD || 'kauvery@123', // Updated password
+  port: parseInt(process.env.DB_PORT) || 1433,
   options: {
     encrypt: true,
+    trustServerCertificate: false,
     enableArithAbort: true,
-    trustServerCertificate: false
+    connectionTimeout: 30000,
+    requestTimeout: 30000,
+    pool: {
+      max: 10,
+      min: 0,
+      idleTimeoutMillis: 30000
+    }
   }
 };
 
@@ -68,73 +80,23 @@ let pool;
 
 async function connectDB() {
   try {
+    console.log('🔌 Attempting to connect to database...');
+    console.log('Server:', dbConfig.server);
+    console.log('Database:', dbConfig.database);
+    console.log('User:', dbConfig.user || 'Using connection string');
+    
     pool = await sql.connect(dbConfig);
     console.log('✅ Connected to MSSQL database');
     
-    // Create tables if they don't exist
-    await createTables();
   } catch (err) {
     console.error('❌ Database connection failed:', err);
-  }
-}
-
-async function createTables() {
-  try {
-    // Appointments table
-    await pool.request().query(`
-      IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='appointments' AND xtype='U')
-      CREATE TABLE appointments (
-        id INT IDENTITY(1,1) PRIMARY KEY,
-        app_no VARCHAR(100) NOT NULL,
-        username VARCHAR(255) NOT NULL,
-        userid VARCHAR(100) NOT NULL,
-        doctorname VARCHAR(255) NOT NULL,
-        speciality VARCHAR(255) NOT NULL,
-        appointment_date DATE NOT NULL,
-        appointment_time TIME NOT NULL,
-        room_id VARCHAR(100) NOT NULL,
-        created_at DATETIME2 DEFAULT GETDATE(),
-        updated_at DATETIME2 DEFAULT GETDATE()
-      )
-    `);
-
-    // Video call events table
-    await pool.request().query(`
-      IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='video_call_events' AND xtype='U')
-      CREATE TABLE video_call_events (
-        id INT IDENTITY(1,1) PRIMARY KEY,
-        appointment_id INT NOT NULL,
-        event_type VARCHAR(50) NOT NULL,
-        event_timestamp DATETIME2 DEFAULT GETDATE(),
-        event_data NVARCHAR(MAX),
-        room_id VARCHAR(100) NOT NULL,
-        user_id VARCHAR(100) NOT NULL,
-        username VARCHAR(255) NOT NULL,
-        FOREIGN KEY (appointment_id) REFERENCES appointments(id)
-      )
-    `);
-
-    // Call sessions table for tracking duration
-    await pool.request().query(`
-      IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='call_sessions' AND xtype='U')
-      CREATE TABLE call_sessions (
-        id INT IDENTITY(1,1) PRIMARY KEY,
-        appointment_id INT NOT NULL,
-        session_start DATETIME2 NOT NULL,
-        session_end DATETIME2,
-        duration_seconds INT,
-        room_id VARCHAR(100) NOT NULL,
-        user_id VARCHAR(100) NOT NULL,
-        username VARCHAR(255) NOT NULL,
-        status VARCHAR(50) DEFAULT 'active',
-        created_at DATETIME2 DEFAULT GETDATE(),
-        FOREIGN KEY (appointment_id) REFERENCES appointments(id)
-      )
-    `);
-
-    console.log('✅ Database tables created/verified');
-  } catch (err) {
-    console.error('❌ Error creating tables:', err);
+    console.error('Error details:', {
+      code: err.code,
+      message: err.message,
+      server: dbConfig.server,
+      database: dbConfig.database,
+      user: dbConfig.user || 'Connection string'
+    });
   }
 }
 
@@ -183,19 +145,23 @@ function decrypt(keyString, cipherTextBase64) {
   }
 }
 
-// Store appointment data
+// Helper function to store appointment data
 async function storeAppointment(appointmentData) {
   try {
+    console.log('💾 Server: Storing appointment data:', appointmentData);
+    
     const request = pool.request();
     
     // Check if appointment already exists
-    const existingAppointment = await request.query(`
-      SELECT id FROM appointments WHERE app_no = '${appointmentData.app_no}' AND userid = '${appointmentData.userid}'
+    const checkResult = await request.query(`
+      SELECT id FROM appointments 
+      WHERE app_no = '${appointmentData.app_no}' 
+      AND userid = '${appointmentData.userid}'
     `);
     
-    if (existingAppointment.recordset.length > 0) {
+    if (checkResult.recordset.length > 0) {
       // Update existing appointment
-      await request.query(`
+      const updateResult = await request.query(`
         UPDATE appointments 
         SET username = '${appointmentData.username}',
             doctorname = '${appointmentData.doctorname}',
@@ -204,32 +170,45 @@ async function storeAppointment(appointmentData) {
             appointment_time = '${appointmentData.appointment_time}',
             room_id = '${appointmentData.room_id}',
             updated_at = GETDATE()
-        WHERE app_no = '${appointmentData.app_no}' AND userid = '${appointmentData.userid}'
+        WHERE app_no = '${appointmentData.app_no}' 
+        AND userid = '${appointmentData.userid}'
       `);
       
-      console.log('✅ Appointment updated:', appointmentData.app_no);
-      return existingAppointment.recordset[0].id;
+      console.log('✅ Server: Appointment updated successfully');
+      return { 
+        success: true, 
+        appointment_id: checkResult.recordset[0].id,
+        message: 'Appointment updated successfully' 
+      };
     } else {
       // Insert new appointment
-      const result = await request.query(`
-        INSERT INTO appointments (app_no, username, userid, doctorname, speciality, appointment_date, appointment_time, room_id)
-        VALUES ('${appointmentData.app_no}', '${appointmentData.username}', '${appointmentData.userid}', 
-                '${appointmentData.doctorname}', '${appointmentData.speciality}', '${appointmentData.appointment_date}', 
-                '${appointmentData.appointment_time}', '${appointmentData.room_id}')
+      const insertResult = await request.query(`
+        INSERT INTO appointments 
+        (app_no, username, userid, doctorname, speciality, appointment_date, appointment_time, room_id)
+        VALUES 
+        ('${appointmentData.app_no}', '${appointmentData.username}', '${appointmentData.userid}', 
+         '${appointmentData.doctorname}', '${appointmentData.speciality}', 
+         '${appointmentData.appointment_date}', '${appointmentData.appointment_time}', 
+         '${appointmentData.room_id}')
       `);
       
-      console.log('✅ New appointment stored:', appointmentData.app_no);
-      
-      // Get the inserted appointment ID
-      const newAppointment = await request.query(`
-        SELECT id FROM appointments WHERE app_no = '${appointmentData.app_no}' AND userid = '${appointmentData.userid}'
+      // Get the newly created appointment ID
+      const newAppointmentResult = await request.query(`
+        SELECT id FROM appointments 
+        WHERE app_no = '${appointmentData.app_no}' 
+        AND userid = '${appointmentData.userid}'
       `);
       
-      return newAppointment.recordset[0].id;
+      console.log('✅ Server: Appointment created successfully');
+      return { 
+        success: true, 
+        appointment_id: newAppointmentResult.recordset[0].id,
+        message: 'Appointment created successfully' 
+      };
     }
-  } catch (err) {
-    console.error('❌ Error storing appointment:', err);
-    throw err;
+  } catch (error) {
+    console.error('❌ Server: Error storing appointment:', error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -360,38 +339,41 @@ app.post('/api/decrypt', (req, res) => {
   }
 });
 
-// Store appointment endpoint
+// API endpoint to store appointment data
 app.post('/api/appointments', async (req, res) => {
   try {
+    console.log('📝 Server: Received appointment data:', req.body);
+    
     const appointmentData = req.body;
     
     // Validate required fields
-    const requiredFields = ['app_no', 'username', 'userid', 'doctorname', 'speciality', 'appointment_date', 'appointment_time', 'room_id'];
-    const missingFields = requiredFields.filter(field => !appointmentData[field]);
-    
-    if (missingFields.length > 0) {
+    if (!appointmentData.app_no || !appointmentData.username || !appointmentData.userid) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields',
-        missingFields: missingFields
+        error: 'Missing required fields: app_no, username, userid'
       });
     }
     
-    const appointmentId = await storeAppointment(appointmentData);
+    // Store appointment in database
+    const result = await storeAppointment(appointmentData);
     
-    res.json({
-      success: true,
-      appointment_id: appointmentId,
-      message: 'Appointment stored successfully',
-      timestamp: new Date().toISOString()
-    });
-    
+    if (result.success) {
+      res.json({
+        success: true,
+        appointment_id: result.appointment_id,
+        message: result.message
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error
+      });
+    }
   } catch (error) {
-    console.error('❌ Error storing appointment:', error);
+    console.error('❌ Server: Error in /api/appointments:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to store appointment',
-      details: error.message
+      error: 'Internal server error'
     });
   }
 });
@@ -514,6 +496,29 @@ app.get('/api/appointments/:appNo', async (req, res) => {
       success: false,
       error: 'Failed to fetch appointment',
       details: error.message
+    });
+  }
+});
+
+// Test database connection endpoint
+app.get('/api/test-db', async (req, res) => {
+  try {
+    if (!pool) {
+      return res.status(500).json({ success: false, error: 'Database not connected' });
+    }
+    
+    const result = await pool.request().query('SELECT 1 as test');
+    res.json({ 
+      success: true, 
+      message: 'Database connection successful',
+      data: result.recordset 
+    });
+  } catch (error) {
+    console.error('❌ Database test failed:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Database connection failed',
+      details: error.message 
     });
   }
 });
