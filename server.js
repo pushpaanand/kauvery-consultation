@@ -4,7 +4,6 @@ const path = require('path');
 const crypto = require('crypto');
 const sql = require('mssql');
 const { DefaultAzureCredential, ClientSecretCredential } = require('@azure/identity');
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -278,23 +277,23 @@ async function endCallSession(sessionData) {
 }
 
 // Error handling middleware
-app.use((error, req, res, next) => {
-  console.error('Server error:', error);
+// app.use((error, req, res, next) => {
+//   console.error('Server error:', error);
   
-  if (error.message === 'Not allowed by CORS') {
-    return res.status(403).json({
-      success: false,
-      error: 'CORS policy violation',
-      message: 'Request origin not allowed'
-    });
-  }
+//   if (error.message === 'Not allowed by CORS') {
+//     return res.status(403).json({
+//       success: false,
+//       error: 'CORS policy violation',
+//       message: 'Request origin not allowed'
+//     });
+//   }
   
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    message: NODE_ENV === 'development' ? error.message : 'Something went wrong'
-  });
-});
+//   res.status(500).json({
+//     success: false,
+//     error: 'Internal server error',
+//     message: NODE_ENV === 'development' ? error.message : 'Something went wrong'
+//   });
+// });
 
 // Main decryption endpoint
 app.post('/api/decrypt', (req, res) => {
@@ -523,32 +522,52 @@ app.get('/api/test-db', async (req, res) => {
   }
 });
 
-
-
 // Start server and connect to database
-async function startServer() {
-  try {
-    await connectDB();
+// async function startServer() {
+//   try {
+//     await connectDB();
     
-    // app.listen(PORT, () => {
-    //   console.log(`🚀 Server running on port ${PORT}`);
-    //   console.log(`📊 Database connected: ${dbConfig.database}`);
-    // });
-  } catch (err) {
-    console.error('❌ Failed to start server:', err);
-    process.exit(1);
+//     // app.listen(PORT, () => {
+//     //   console.log(`🚀 Server running on port ${PORT}`);
+//     //   console.log(`📊 Database connected: ${dbConfig.database}`);
+//     // });
+//   } catch (err) {
+//     console.error('❌ Failed to start server:', err);
+//     process.exit(1);
+//   }
+// }
+
+// startServer();
+
+// app.get("*", (req, res) => {
+//   res.sendFile(path.join(__dirname, "client/build", "index.html"));
+// });
+
+// app.listen(PORT, () => {
+//   console.log(`🚀 Server running on port ${PORT}`);
+//   console.log(`📊 Database connected: ${dbConfig.database}`);
+// });
+// Serve React app (catch-all) - must be after API routes
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'client', 'build', 'index.html'));
+});
+
+// Error handler - last middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled server error:', err && err.message ? err.message : err);
+  if (err && err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ success: false, error: 'CORS policy violation' });
   }
-}
-
-startServer();
-
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "client/build", "index.html"));
+  res.status(500).json({ success: false, error: 'Internal server error', details: NODE_ENV === 'development' ? err.message : undefined });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Database connected: ${dbConfig.database}`);
-});
+// Start: connect DB then start server
+(async function main() {
+  await connectDB();
+  app.listen(PORT, () => {
+    console.log(`🚀 Server listening on port ${PORT}. DB connected: ${!!pool}`);
+  });
+})();
 
 module.exports = app;
