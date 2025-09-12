@@ -32,7 +32,6 @@ function App() {
       return false;
     }
     
-    console.log('✅ All required environment variables are set');
     return true;
   };
 
@@ -43,19 +42,16 @@ function App() {
     if (!isValid) {
       console.error('❌ App.js: Environment validation failed. Please check your .env file.');
     } else {
-      console.log('✅ App.js: Environment validation passed.');
+     
     }
   }, []);
 
   // Function to decrypt encoded ID parameter by calling Express server
   const decryptParameter = async (encodedText) => {
     try {
-      // const serverUrl = 'http://localhost:3001';
-      const serverUrl = 'https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net';
+      const serverUrl = 'http://localhost:3001';
+      // const serverUrl = 'https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net';
       const apiEndpoint = `${serverUrl}/api/decrypt`;
-      
-      console.log('🔐 App.js: Calling decrypt API with:', encodedText);
-      console.log('🔐 App.js: API endpoint:', apiEndpoint);
       
       const response = await fetch(apiEndpoint, {
         method: 'POST',
@@ -67,8 +63,6 @@ function App() {
         }),
       });
   
-      console.log('🔐 App.js: Response status:', response.status);
-      
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ App.js: Server error response:', errorText);
@@ -76,7 +70,6 @@ function App() {
       }
       
       const data = await response.json();
-      console.log('✅ App.js: Decryption successful:', data);
       return data.decryptedText;
     } catch (error) {
       console.error('❌ App.js: Decryption failed:', error);
@@ -87,8 +80,6 @@ function App() {
   // Function to store appointment data in database
   const storeAppointmentData = async (appointmentData) => {
     try {
-      console.log('💾 App.js: Storing appointment data:', appointmentData);
-      
       // Prepare appointment data for storage - only the 3 required parameters + defaults
       const appointmentToStore = {
         app_no: appointmentData.app_no,
@@ -96,10 +87,10 @@ function App() {
         userid: appointmentData.userid,
         // Set default values for other fields (hidden for now)
         room_id: `ROOM_${appointmentData.app_no}`,
-        doctorname: 'Dr. General',
-        speciality: 'General Medicine',
-        appointment_date: new Date().toISOString().split('T')[0],
-        appointment_time: new Date().toTimeString().split(' ')[0]
+        doctorname: appointmentData.doctorname,
+        speciality: appointmentData.speciality,
+        appointment_date: appointmentData.appointment_date,
+        appointment_time: appointmentData.appointment_time
       };
 
       // Store appointment in database
@@ -107,8 +98,6 @@ function App() {
       
       if (result.success) {
         setAppointmentStored(true);
-        console.log('✅ App.js: Appointment stored successfully in database');
-        
         // Store appointment ID in session storage
         AppointmentService.setAppointmentId(result.appointment_id);
         
@@ -128,39 +117,175 @@ function App() {
     }
   };
 
+  // Update the getQueryParams function (around line 130)
   // Function to get query parameters
   const getQueryParams = () => {
     const params = new URLSearchParams(window.location.search);
-    console.log('🔍 App.js: Query params:', params);
     return {
-      // Only the 3 required parameters
+      // New encrypted parameters
+      a: params.get("a"),        // app_no (Appointment number)
+      un: params.get("un"),      // username (Patient Name)
+      ui: params.get("ui"),      // userid (Patient id)
+      d: params.get("d"),        // doctorname (Doctor Name)
+      s: params.get("s"),        // speciality (Speciality)
+      ad: params.get("ad"),      // appointment_date (Appointment Date)
+      at: params.get("at"),      // appointment_time (Appointment Time)
+      
+      // Keep legacy parameters for backward compatibility
       app_no: params.get("app_no"),
       username: params.get("username"),
       userid: params.get("userid"),
-      // Keep encrypted ID parameter for decryption
       id: params.get("id"),
-      // Keep token for backward compatibility
       token: params.get("token"),
-      // Keep legacy parameters for backward compatibility
       name: params.get("name"),
       date: params.get("date"),
       time: params.get("time"),
     };
   };
 
+  // Add new function to decrypt multiple parameters individually
+  const processMultipleEncryptedParams = async (params) => {
+    try {
+      setIsDecrypting(true);
+      setDecryptionError(null);
+      
+      const decryptedData = {};
+      
+      // Decrypt each parameter individually
+      if (params.a) {
+        decryptedData.app_no = await decryptParameter(params.a);
+      }
+      
+      if (params.un) {
+        decryptedData.username = await decryptParameter(params.un);
+      }
+      
+      if (params.ui) {
+        decryptedData.userid = await decryptParameter(params.ui);
+      }
+      
+      if (params.d) {
+        decryptedData.doctorname = await decryptParameter(params.d);
+      }
+      
+      if (params.s) {
+        decryptedData.speciality = await decryptParameter(params.s);
+      }
+      
+      if (params.ad) {
+        decryptedData.appointment_date = await decryptParameter(params.ad);
+      }
+      
+      if (params.at) {
+        decryptedData.appointment_time = await decryptParameter(params.at);
+      }
+      
+      // Create appointment data object with all decrypted parameters
+      const appointmentData = {
+        app_no: decryptedData.app_no,
+        username: decryptedData.username,
+        userid: decryptedData.userid,
+        doctorname: decryptedData.doctorname,
+        speciality: decryptedData.speciality,
+        appointment_date: decryptedData.appointment_date,
+        appointment_time: decryptedData.appointment_time,
+        room_id: `ROOM_${decryptedData.app_no || decryptedData.userid}`
+      };
+
+      // Validate appointment date (24 hours window)
+      const dateValidation = validateAppointmentDate(appointmentData.appointment_date, appointmentData.appointment_time);
+      
+      // Fix only the date formatting in the error message
+      if (!dateValidation.isValid) {
+        // Format date properly for display - handle DD/MM/YYYY format
+        let formattedDate;
+        try {
+          const dateOnly = appointmentData.appointment_date.split(' ')[0]; // Remove time
+          const [day, month, year] = dateOnly.split('/');
+          const dateObj = new Date(year, month - 1, day); // month is 0-indexed
+          formattedDate = dateObj.toLocaleDateString();
+        } catch (error) {
+          // Fallback to original date string if parsing fails
+          formattedDate = appointmentData.appointment_date.split(' ')[0];
+        }
+        
+        setDecryptionError(`Access denied. Video consultation is only available on your appointment date. Your appointment is scheduled for ${formattedDate}.`);
+        setIsDecrypting(false);
+        setIsTokenValid(false);
+        setDecryptionComplete(true);
+        return;
+      }
+
+      // Store appointment data in database
+      await storeAppointmentData(appointmentData);
+
+      // Create token and set as valid
+      const videoToken = `video_${appointmentData.app_no || appointmentData.userid}`;
+      sessionStorage.setItem("authToken", videoToken);
+      sessionStorage.setItem("decryptedParams", JSON.stringify(appointmentData));
+      setToken(videoToken);
+      setIsTokenValid(true);
+      setDecryptionComplete(true);
+      setIsDecrypting(false);
+      
+    } catch (error) {
+      console.error('❌ App.js: Failed to process multiple encrypted parameters:', error);
+      setDecryptionError(error.message);
+      setIsDecrypting(false);
+      setIsTokenValid(false);
+    }
+  };
+
+  // Simple and correct validateAppointmentDate function
+  const validateAppointmentDate = (appointmentDate, appointmentTime) => {
+    try {
+      
+      // Get current date in DD/MM/YYYY format (same as appointment date format)
+      const today = new Date();
+      const currentDay = today.getDate().toString().padStart(2, '0');
+      const currentMonth = (today.getMonth() + 1).toString().padStart(2, '0');
+      const currentYear = today.getFullYear();
+      const currentDateString = `${currentDay}/${currentMonth}/${currentYear}`;
+      
+      // Get appointment date without time
+      const appointmentDateString = appointmentDate.split(' ')[0]; // Remove " 00:00:00"
+      
+      // Simple string comparison
+      const isOnAppointmentDate = currentDateString === appointmentDateString;
+      
+      return {
+        isValid: isOnAppointmentDate,
+        currentDate: currentDateString,
+        appointmentDate: appointmentDateString
+      };
+    } catch (error) {
+      console.error('❌ Error validating appointment date:', error);
+      return {
+        isValid: false,
+        error: error.message
+      };
+    }
+  };
+
   useEffect(() => {
     const params = getQueryParams();
 
-    // Function to process encoded ID parameter
+    // Check if we have the new encrypted parameters format
+    const hasNewEncryptedParams = params.a || params.un || params.ui || params.d || params.s || params.ad || params.at;
+    
+    if (hasNewEncryptedParams) {
+      processMultipleEncryptedParams(params);
+      return;
+    }
+
+    // Function to process encoded ID parameter (legacy)
     const processEncodedId = async (encryptedId) => {
       try {
         setIsDecrypting(true);
         setDecryptionError(null);
-        console.log(' App.js: Processing encoded ID parameter...', encryptedId);
         
         // Decrypt the single encoded ID
         const decryptedId = await decryptParameter(encryptedId);
-        console.log('🔍 App.js: Decrypted data:', decryptedId);
         
         // Parse the decrypted string to get actual appointment data
         const urlParams = new URLSearchParams(decryptedId);
@@ -175,11 +300,23 @@ function App() {
           userid: userid,
           // Set default values for other fields (hidden for now)
           room_id: `ROOM_${appointmentId}`,
-          doctorname: 'Dr. General',
-          speciality: 'General Medicine',
-          appointment_date: new Date().toISOString().split('T')[0],
-          appointment_time: new Date().toTimeString().split(' ')[0]
+          doctorname: decryptedId.doctorname,
+          speciality: decryptedId.speciality,
+          appointment_date: decryptedId.appointment_date,
+          appointment_time: decryptedId.appointment_time,
         };
+
+        // Validate appointment date (24 hours window)
+        const dateValidation = validateAppointmentDate(appointmentData.appointment_date, appointmentData.appointment_time);
+        
+        if (!dateValidation.isValid) {
+          const formattedDate = new Date(appointmentData.appointment_date).toLocaleDateString();
+          setDecryptionError(`Access denied. Video consultation is only available within 24 hours of your appointment date. Your appointment is scheduled for ${formattedDate}.`);
+          setIsDecrypting(false);
+          setIsTokenValid(false);
+          setDecryptionComplete(true);
+          return;
+        }
 
         // Store appointment data in database
         await storeAppointmentData(appointmentData);
@@ -192,7 +329,6 @@ function App() {
         setIsTokenValid(true);
         setDecryptionComplete(true);
         setIsDecrypting(false);
-        console.log('✅ App.js: Encoded ID processed successfully, setting token:', videoToken);
         
       } catch (error) {
         console.error('❌ App.js: Failed to process encoded ID:', error);
@@ -202,12 +338,11 @@ function App() {
       }
     };
 
-    // Function to process direct URL parameters
+    // Function to process direct URL parameters (legacy)
     const processDirectParams = async (directParams) => {
       try {
         setIsDecrypting(true);
         setDecryptionError(null);
-        console.log(' App.js: Processing direct URL parameters...', directParams);
         
         // Create appointment data object with only the 3 required parameters + defaults
         const appointmentData = {
@@ -216,23 +351,34 @@ function App() {
           userid: directParams.userid,
           // Set default values for other fields (hidden for now)
           room_id: `ROOM_${directParams.app_no || directParams.userid}`,
-          doctorname: 'Dr. General',
-          speciality: 'General Medicine',
-          appointment_date: new Date().toISOString().split('T')[0],
-          appointment_time: new Date().toTimeString().split(' ')[0]
+          doctorname: directParams.doctorname,
+          speciality: directParams.speciality,
+          appointment_date: directParams.date,
+          appointment_time: directParams.time
         };
+
+        // Validate appointment date (24 hours window)
+        const dateValidation = validateAppointmentDate(appointmentData.appointment_date, appointmentData.appointment_time);
+        
+        if (!dateValidation.isValid) {
+          const formattedDate = new Date(appointmentData.appointment_date).toLocaleDateString();
+          setDecryptionError(`Access denied. Video consultation is only available within 24 hours of your appointment date. Your appointment is scheduled for ${formattedDate}.`);
+          setIsDecrypting(false);
+          setIsTokenValid(false);
+          setDecryptionComplete(true);
+          return;
+        }
 
         // Store appointment data in database
         await storeAppointmentData(appointmentData);
 
         // Create token and set as valid
         const videoToken = `video_${directParams.app_no || directParams.userid}`;
-        sessionStorage.setItem("authToken", videoToken);
-        setToken(videoToken);
-        setIsTokenValid(true);
+      sessionStorage.setItem("authToken", videoToken);
+      setToken(videoToken);
+      setIsTokenValid(true);
         setDecryptionComplete(true);
         setIsDecrypting(false);
-        console.log('✅ App.js: Direct parameters processed successfully, setting token:', videoToken);
         
       } catch (error) {
         console.error('❌ App.js: Failed to process direct parameters:', error);
@@ -244,17 +390,14 @@ function App() {
 
     // Main processing logic - Check for encrypted parameter first (highest priority)
     if (params.id) {
-      console.log(' App.js: Encoded ID parameter detected, decrypting...');
       processEncodedId(params.id); // Pass the encrypted ID directly
     }
     // Check for video consultation parameters (direct parameters)
-    else if (params.app_no && params.username && params.userid) {
-      console.log('🔍 App.js: Direct video consultation parameters detected');
+    else if (params.app_no || params.username || params.userid) {
       processDirectParams(params);
     } 
     // Check for original token
     else if (params.token) {
-      console.log('🔍 App.js: Token parameter detected');
       sessionStorage.setItem("authToken", params.token);
       setToken(params.token);
       setIsTokenValid(true);
@@ -267,9 +410,7 @@ function App() {
         setToken(savedToken);
         setIsTokenValid(true);
         setDecryptionComplete(true);
-        console.log('🔍 App.js: Using saved token');
       } else {
-        console.log('🔍 App.js: No valid parameters found');
         setIsTokenValid(false);
         setDecryptionComplete(true);
       }
@@ -331,60 +472,143 @@ function App() {
     </div>
   );
 
-  // Error component for decryption failures
-  const ErrorScreen = () => (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center',
-      height: '100vh',
-      backgroundColor: '#f0f2f5',
-      fontFamily: 'Arial, sans-serif'
-    }}>
+  // Update the ErrorScreen component error detection logic
+  const ErrorScreen = () => {
+    // Determine the error type and message
+    const isDateError = decryptionError && (
+      decryptionError.includes('appointment date') || 
+      decryptionError.includes('24 hours') ||
+      decryptionError.includes('scheduled for')
+    );
+    const isParameterError = decryptionError && decryptionError.includes('Invalid appointment parameters');
+    
+    let errorMessage = '';
+    let errorTitle = 'Access Denied';
+    
+    if (isDateError) {
+      errorTitle = 'Access Denied';
+      errorMessage = decryptionError; // Use the full date error message with formatted date
+    } else if (isParameterError) {
+      errorTitle = 'Access Denied';
+      errorMessage = decryptionError;
+    } else {
+      errorTitle = 'Access Denied';
+      errorMessage = 'We couldn\'t verify your consultation request.\nPlease ensure you are using the correct link provided by Kauvery Hospital.';
+    }
+
+    return (
       <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: 'white',
+        color: '#962067',
+        fontFamily: "'Poppins', sans-serif",
         textAlign: 'center',
-        padding: '40px',
-        backgroundColor: 'white',
-        borderRadius: '10px',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-        maxWidth: '400px',
-        width: '90%'
+        padding: '20px 20px 60px 20px', // Add bottom padding for footer
+        boxSizing: 'border-box',
+        overflow: 'hidden' // Prevent scroll bar
       }}>
         <div style={{
-          width: '50px',
-          height: '50px',
-          backgroundColor: '#e74c3c',
-          borderRadius: '50%',
+          background: 'white',
+          borderRadius: '20px',
+          padding: '40px',
+          maxWidth: '500px',
+          textAlign: 'center',
+          boxShadow: '0 8px 25px rgba(150, 32, 103, 0.15)',
+          border: '3px solid #962067'
+        }}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            background: 'linear-gradient(135deg, #962067, #A23293)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 24px',
+            fontSize: '32px',
+            color: 'white'
+          }}>
+            ⚠️
+          </div>
+          
+          <h1 style={{
+            color: '#962067',
+            fontSize: '28px',
+            fontWeight: '700',
+            margin: '0 0 16px 0',
+            fontFamily: "'Poppins', sans-serif"
+          }}>
+            {errorTitle}
+          </h1>
+          
+          <p style={{
+            color: '#58595B',
+            fontSize: '16px',
+            lineHeight: '1.6',
+            margin: '0 0 24px 0',
+            fontFamily: "'Poppins', sans-serif",
+            whiteSpace: 'pre-line'
+          }}>
+            {errorMessage}
+          </p>
+          
+          <button 
+            onClick={() => window.location.reload()} 
+            style={{
+              background: 'linear-gradient(135deg, #962067, #A23293)',
+              color: 'white',
+              border: 'none',
+              padding: '12px 24px',
+              borderRadius: '20px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: '600',
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.3s ease',
+              boxShadow: '0 4px 15px rgba(150, 32, 103, 0.2)'
+            }}
+            onMouseOver={(e) => {
+              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.boxShadow = '0 6px 20px rgba(150, 32, 103, 0.3)';
+            }}
+            onMouseOut={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 4px 15px rgba(150, 32, 103, 0.2)';
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+        
+        {/* Footer */}
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: 'linear-gradient(135deg, #962067, #A23293)',
+          color: 'white',
+          padding: '12px 20px',
+          textAlign: 'center',
+          fontSize: '13px',
+          fontFamily: "'Poppins', sans-serif",
+          height: '48px', // Fixed height
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto 20px',
-          fontSize: '24px',
-          color: 'white'
-        }}>⚠️</div>
-        <h2 style={{ color: '#e74c3c', marginBottom: '10px' }}>Access Denied</h2>
-        <p style={{ color: '#666', marginBottom: '20px' }}>
-          {decryptionError || 'Invalid appointment parameters. Please check your link and try again.'}
-        </p>
-        <button 
-          onClick={() => window.location.reload()} 
-          style={{
-            backgroundColor: '#3498db',
-            color: 'white',
-            border: 'none',
-            padding: '10px 20px',
-            borderRadius: '5px',
-            cursor: 'pointer',
-            fontSize: '16px'
-          }}
-        >
-          Try Again
-        </button>
+          justifyContent: 'center'
+        }}>
+          © 2025 Kauvery Hospital. All rights reserved.
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
+  // Update the main Access Denied page (around line 600)
+  // Show original Access Denied page if no valid parameters
   return (
     <BrowserRouter>
       <Routes>
@@ -411,11 +635,13 @@ function App() {
                 color: '#962067',
                 fontFamily: "'Poppins', sans-serif",
                 textAlign: 'center',
-                padding: '20px'
+                padding: '20px 20px 60px 20px', // Add bottom padding for footer
+                boxSizing: 'border-box',
+                overflow: 'hidden' // Prevent scroll bar
               }}>
                 <div style={{
                   background: 'white',
-                  borderRadius: '16px',
+                  borderRadius: '20px',
                   padding: '40px',
                   maxWidth: '500px',
                   textAlign: 'center',
@@ -451,39 +677,39 @@ function App() {
                     color: '#58595B',
                     fontSize: '16px',
                     lineHeight: '1.6',
-                    margin: '0 0 24px 0'
+                    margin: '0 0 24px 0',
+                    fontFamily: "'Poppins', sans-serif"
                   }}>
-                    No consultation parameters found in the URL. Please use a valid consultation link provided by Kauvery Hospital.
+                    We couldn't verify your consultation request.<br/>
+                    Please ensure you are using the correct link provided by Kauvery Hospital.
                   </p>
                   
-                  <div style={{
-                    background: '#f8f9fa',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    margin: '24px 0',
-                    border: '2px solid #e9ecef'
-                  }}>
-                    <h3 style={{
-                      color: '#962067',
-                      fontSize: '18px',
+                  <button 
+                    onClick={() => window.location.reload()} 
+                    style={{
+                      background: 'linear-gradient(135deg, #962067, #A23293)',
+                      color: 'white',
+                      border: 'none',
+                      padding: '12px 24px',
+                      borderRadius: '20px',
+                      cursor: 'pointer',
+                      fontSize: '16px',
                       fontWeight: '600',
-                      margin: '0 0 12px 0'
-                    }}>
-                      Required Parameters:
-                    </h3>
-                    <ul style={{
-                      textAlign: 'left',
-                      color: '#58595B',
-                      fontSize: '14px',
-                      lineHeight: '1.8',
-                      margin: '0',
-                      paddingLeft: '20px'
-                    }}>
-                      <li><strong>app_no</strong> - Appointment number</li>
-                      <li><strong>username</strong> - Patient name</li>
-                      <li><strong>userid</strong> - User ID</li>
-                    </ul>
-                  </div>
+                      fontFamily: "'Poppins', sans-serif",
+                      transition: 'all 0.3s ease',
+                      boxShadow: '0 4px 15px rgba(150, 32, 103, 0.2)'
+                    }}
+                    onMouseOver={(e) => {
+                      e.target.style.transform = 'translateY(-2px)';
+                      e.target.style.boxShadow = '0 6px 20px rgba(150, 32, 103, 0.3)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.target.style.transform = 'translateY(0)';
+                      e.target.style.boxShadow = '0 4px 15px rgba(150, 32, 103, 0.2)';
+                    }}
+                  >
+                    Try Again
+                  </button>
                 </div>
                 
                 {/* Footer */}
@@ -498,67 +724,12 @@ function App() {
                   textAlign: 'center',
                   fontSize: '13px',
                   fontFamily: "'Poppins', sans-serif",
-                  fontWeight: '500',
-                  zIndex: 1000,
-                  boxShadow: '0 -2px 8px rgba(150, 32, 103, 0.3)',
-                  height: '40px',
+                  height: '48px', // Fixed height
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '10px'
+                  justifyContent: 'center'
                 }}>
-                  <span style={{ fontSize: '13px', color: 'white' }}>© 2025 Kauvery Hospital. All Rights Reserved.</span>
-                  <span style={{ color: 'white', fontSize: '12px' }}>|</span>
-                  <a 
-                    href="https://www.kauveryhospital.com/disclaimer/" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{
-                      color: 'white',
-                      textDecoration: 'none',
-                      transition: 'color 0.3s ease',
-                      fontSize: '13px',
-                      fontWeight: '500'
-                    }}
-                    onMouseEnter={(e) => e.target.style.color = '#f0f0f0'}
-                    onMouseLeave={(e) => e.target.style.color = 'white'}
-                  >
-                    Disclaimer
-                  </a>
-                  <span style={{ color: 'white', fontSize: '12px' }}>|</span>
-                  <a 
-                    href="https://www.kauveryhospital.com/privacy/" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{
-                      color: 'white',
-                      textDecoration: 'none',
-                      transition: 'color 0.3s ease',
-                      fontSize: '13px',
-                      fontWeight: '500'
-                    }}
-                    onMouseEnter={(e) => e.target.style.color = '#f0f0f0'}
-                    onMouseLeave={(e) => e.target.style.color = 'white'}
-                  >
-                    Privacy Policy
-                  </a>
-                  <span style={{ color: 'white', fontSize: '12px' }}>|</span>
-                  <a 
-                    href="https://www.kauveryhospital.com/terms-conditions/" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{
-                      color: 'white',
-                      textDecoration: 'none',
-                      transition: 'color 0.3s ease',
-                      fontSize: '13px',
-                      fontWeight: '500'
-                    }}
-                    onMouseEnter={(e) => e.target.style.color = '#f0f0f0'}
-                    onMouseLeave={(e) => e.target.style.color = 'white'}
-                  >
-                    T&C
-                  </a>
+                  © 2025 Kauvery Hospital. All rights reserved.
                 </div>
               </div>
             )

@@ -38,7 +38,8 @@ const corsOptions = {
     const allowedOrigins = [
       'https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net',
       'http://localhost:3000',
-      'https://localhost:3000'
+      'https://localhost:3000',
+      'https://kauverytelehealth.kauverykonnect.com'
     ];
     
     // Allow requests with no origin (like mobile apps or curl requests)
@@ -79,13 +80,7 @@ let pool;
 
 async function connectDB() {
   try {
-    console.log('🔌 Attempting to connect to database...');
-    console.log('Server:', dbConfig.server);
-    console.log('Database:', dbConfig.database);
-    console.log('User:', dbConfig.user || 'Using connection string');
-    
     pool = await sql.connect(dbConfig);
-    console.log('✅ Connected to MSSQL database');
     
   } catch (err) {
     console.error('❌ Database connection failed:', err);
@@ -147,8 +142,6 @@ function decrypt(keyString, cipherTextBase64) {
 // Helper function to store appointment data
 async function storeAppointment(appointmentData) {
   try {
-    console.log('💾 Server: Storing appointment data:', appointmentData);
-    
     const request = pool.request();
     
     // Check if appointment already exists
@@ -173,7 +166,6 @@ async function storeAppointment(appointmentData) {
         AND userid = '${appointmentData.userid}'
       `);
       
-      console.log('✅ Server: Appointment updated successfully');
       return { 
         success: true, 
         appointment_id: checkResult.recordset[0].id,
@@ -198,7 +190,6 @@ async function storeAppointment(appointmentData) {
         AND userid = '${appointmentData.userid}'
       `);
       
-      console.log('✅ Server: Appointment created successfully');
       return { 
         success: true, 
         appointment_id: newAppointmentResult.recordset[0].id,
@@ -222,7 +213,6 @@ async function storeVideoCallEvent(eventData) {
               '${eventData.room_id}', '${eventData.user_id}', '${eventData.username}')
     `);
     
-    console.log('✅ Video call event stored:', eventData.event_type);
   } catch (err) {
     console.error('❌ Error storing video call event:', err);
     throw err;
@@ -249,7 +239,6 @@ async function startCallSession(sessionData) {
       VALUES (${sessionData.appointment_id}, GETDATE(), '${sessionData.room_id}', '${sessionData.user_id}', '${sessionData.username}')
     `);
     
-    console.log('✅ Call session started for appointment:', sessionData.appointment_id);
   } catch (err) {
     console.error('❌ Error starting call session:', err);
     throw err;
@@ -269,7 +258,6 @@ async function endCallSession(sessionData) {
       WHERE appointment_id = ${sessionData.appointment_id} AND status = 'active'
     `);
     
-    console.log('✅ Call session ended for appointment:', sessionData.appointment_id);
   } catch (err) {
     console.error('❌ Error ending call session:', err);
     throw err;
@@ -318,8 +306,6 @@ app.post('/api/decrypt', (req, res) => {
 
     const decryptedText = decrypt(config.decryptionKey, text);
     
-    console.log(`✅ Decryption successful for input length: ${text.length}`);
-    
     res.json({ 
       success: true, 
       decryptedText, 
@@ -341,8 +327,6 @@ app.post('/api/decrypt', (req, res) => {
 // API endpoint to store appointment data
 app.post('/api/appointments', async (req, res) => {
   try {
-    console.log('📝 Server: Received appointment data:', req.body);
-    
     const appointmentData = req.body;
     
     // Validate required fields

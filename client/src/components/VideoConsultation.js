@@ -5,12 +5,7 @@ import AppointmentService from '../utils/appointmentService';
 import ZegoUIKitPrebuilt from '@zegocloud/zego-uikit-prebuilt';
 
 // Helper function to get Zego credentials from environment variables
-const getZegoCredentials = () => {
-  console.log('🔍 Debug: Environment variables check:');
-  console.log('🔍 REACT_APP_ZEGO_APP_ID:', process.env.REACT_APP_ZEGO_APP_ID);
-  console.log('🔍 REACT_APP_ZEGO_SERVER_SECRET:', process.env.REACT_APP_ZEGO_SERVER_SECRET ? '***exists***' : 'undefined');
-  console.log('🔍 All REACT_APP_ variables:', Object.keys(process.env).filter(key => key.startsWith('REACT_APP_')));
-  
+const getZegoCredentials = () => {  
   return {
     appId: process.env.REACT_APP_ZEGO_APP_ID,
     serverSecret: process.env.REACT_APP_ZEGO_SERVER_SECRET
@@ -209,7 +204,6 @@ const ZegoVideoInterface = ({ containerRef, isInitialized, initializationError, 
               
               <button 
                 onClick={() => {
-                  console.log('🔴 Confirm button clicked!');
                   alert('Confirm button clicked! Health packages page should appear now.');
                   onConfirmLeaveRoom();
                 }}
@@ -348,6 +342,9 @@ const ZegoVideoInterface = ({ containerRef, isInitialized, initializationError, 
   }
 };
 
+// Define parsedParams globally at the top of the component
+let globalParsedParams = {};
+
 const VideoConsultation = () => {
   const [isInConsultation, setIsInConsultation] = useState(true);
   const [isPrejoinVisible, setIsPrejoinVisible] = useState(false);
@@ -357,7 +354,7 @@ const VideoConsultation = () => {
   });
   const [joinButtonLoading, setJoinButtonLoading] = useState(false);
   const [notification, setNotification] = useState({ show: false, message: '', type: 'info' });
-  const [appointmentData, setAppointmentData] = useState(null);
+  const [appointmentData, setAppointmentData] = useState({}); // Change from [] to {}
   const [accessDenied, setAccessDenied] = useState(false);
   const [accessDeniedReason, setAccessDeniedReason] = useState('');
   const [zegoInitialized, setZegoInitialized] = useState(false);
@@ -376,9 +373,8 @@ const VideoConsultation = () => {
 
   // Monitor health packages state changes
   React.useEffect(() => {
-    console.log('🔍 Debug: showHealthPackages state changed to:', showHealthPackages);
     if (showHealthPackages) {
-      console.log('🔍 Debug: Health packages should be visible now!');
+
     }
   }, [showHealthPackages]);
 
@@ -428,7 +424,6 @@ const VideoConsultation = () => {
           button.textContent.toLowerCase().includes('quit') ||
           button.textContent.toLowerCase().includes('hang up')
         )) {
-          console.log('🔴 Found Zego end call button, intercepting:', button.textContent);
           
           // Remove existing click handlers
           button.replaceWith(button.cloneNode(true));
@@ -439,7 +434,7 @@ const VideoConsultation = () => {
               e.preventDefault();
               e.stopPropagation();
               e.stopImmediatePropagation();
-              console.log('🔴 Zego end call intercepted, showing our popup');
+              
               handleEndCall();
               return false;
             }, true);
@@ -453,7 +448,6 @@ const VideoConsultation = () => {
       const confirmButtons = document.querySelectorAll('button');
       confirmButtons.forEach(button => {
         if (button.textContent && button.textContent.toLowerCase().includes('confirm')) {
-          console.log('🎨 Force setting confirm button color to #962067');
           button.style.background = '#962067';
           button.style.backgroundColor = '#962067';
           button.style.color = '#ffffff';
@@ -485,7 +479,6 @@ const VideoConsultation = () => {
     if (showLeaveRoomPopup) {
       const timer = setTimeout(() => {
         if (confirmButtonRef.current) {
-          console.log('🔴 Force setting confirm button color via ref');
           confirmButtonRef.current.style.background = '#962067';
           confirmButtonRef.current.style.backgroundColor = '#962067';
           confirmButtonRef.current.style.color = '#ffffff';
@@ -496,7 +489,6 @@ const VideoConsultation = () => {
         // Also try via querySelector as backup
         const confirmButton = document.querySelector('.kauvery-confirm-button');
         if (confirmButton) {
-          console.log('🔴 Force setting confirm button color via querySelector');
           confirmButton.style.background = '#962067';
           confirmButton.style.backgroundColor = '#962067';
           confirmButton.style.color = '#ffffff';
@@ -812,13 +804,6 @@ const VideoConsultation = () => {
         event.stopPropagation();
         event.stopImmediatePropagation();
         
-        // Log the current state but don't force initialization
-        console.log('🔍 Debug: Current state during DOM conflict:', {
-          zegoInitialized,
-          hasZegoInstance: !!zegoInstanceRef.current,
-          hasAppointmentData: !!appointmentData
-        });
-        
         return false;
       }
     };
@@ -858,7 +843,6 @@ const VideoConsultation = () => {
       // Disconnect observer
       if (observerRef.current) {
         observerRef.current.disconnect();
-        console.log('🔍 MutationObserver disconnected');
       }
       
       // Clean up any remaining consultation details
@@ -901,57 +885,55 @@ const VideoConsultation = () => {
   }, []);
 
   useEffect(() => {
-    
-    const urlParams = new URLSearchParams(window.location.search);
-    
-    // Get doctor name from URL parameters
-    const doctorName = urlParams.get('doctor_name');
-    
-    // Get decrypted parameters from App.js via session storage
-    const decryptedParamsFromStorage = sessionStorage.getItem('decryptedParams');
-    if (decryptedParamsFromStorage) {
-      try {
-        const parsedParams = JSON.parse(decryptedParamsFromStorage);
-        console.log('🔍 VideoConsultation: Using decrypted params from App.js storage:', parsedParams);
+    try {
+      // Get decrypted params from App.js storage
+      const decryptedParams = sessionStorage.getItem("decryptedParams");
+      
+      if (decryptedParams) {
+        const parsedParams = JSON.parse(decryptedParams);
         
-        const department = urlParams.get('department') || 
-                         urlParams.get('unit_name') || 
-                         'General Medicine';
-
+        // Store globally so it's accessible everywhere
+        globalParsedParams = parsedParams;
+        
         // Generate room ID based on decrypted appointment ID
         const roomId = `ROOM_${parsedParams.app_no}`;
 
         // Set appointment data with decrypted values from App.js
         const appointmentDataToSet = {
           id: parsedParams.app_no,
-          department: department,
+          department: parsedParams.speciality,
           username: parsedParams.username,
           userid: parsedParams.userid,
           roomId: roomId,
-          doctorName: doctorName,
+          doctorName: parsedParams.doctorname,
           status: 'Scheduled'
         };
-        
-        console.log('✅ VideoConsultation: Setting appointment data from App.js:', appointmentDataToSet);
-        setAppointmentData(appointmentDataToSet);
-        
-      } catch (error) {
-        console.error('❌ Error parsing decrypted params from App.js storage:', error);
-      setAccessDenied(true);
-        setAccessDeniedReason('Failed to get appointment data from App.js. Please refresh the page.');
-      }
-    } else {
-      console.log('❌ No appointment data found in session storage from App.js');
-        setAccessDenied(true);
-      setAccessDeniedReason('No appointment data available. Please check your consultation link.');
-      }
 
-  }, []); // Only run once on mount
+        setAppointmentData(appointmentDataToSet);
+      }
+    } catch (error) {
+      console.error('❌ Error parsing decrypted params from App.js storage:', error);
+      setAccessDenied(true);
+      setAccessDeniedReason('Failed to load appointment data');
+    }
+  }, []);
+
+  // Now you can use globalParsedParams anywhere in the component
+  const getDoctorName = () => {
+    return globalParsedParams.doctorname || 'Dr. Unknown';
+  };
+
+  const getPatientName = () => {
+    return globalParsedParams.username || 'Patient';
+  };
+
+  // Use these functions in your display code
+  const doctorName = getDoctorName();
+  const patientName = getPatientName();
 
   // Separate useEffect to initialize Zego when appointment data is available
   useEffect(() => {
     if (appointmentData && appointmentData.roomId && !zegoInitialized && !zegoInstanceRef.current) {
-      console.log('🔄 Starting Zego initialization from appointment data useEffect...');
       
       // Temporarily delay Zego initialization to ensure DOM is stable
       setTimeout(() => {
@@ -962,14 +944,14 @@ const VideoConsultation = () => {
 
   // Debug useEffect to track zegoInitialized state changes
   useEffect(() => {
-    console.log('🔍 Debug: zegoInitialized state changed to:', zegoInitialized);
-    console.log('🔍 Debug: Current state:', {
-      zegoInitialized,
-      hasZegoInstance: !!zegoInstanceRef.current,
-      hasAppointmentData: !!appointmentData,
-      appointmentData: appointmentData
-    });
+
   }, [zegoInitialized, appointmentData]);
+
+  // Add this useEffect to log when appointmentData changes
+  useEffect(() => {
+    if (appointmentData && Object.keys(appointmentData).length > 0) {
+    }
+  }, [appointmentData]);
 
   const generateAppointmentId = () => {
     const prefix = 'KH';
@@ -986,8 +968,7 @@ const VideoConsultation = () => {
   };
 
   const handleEndCall = () => {
-    console.log('🔴 End call triggered - showing leave room popup');
-    
+
     // Track end call event
     const appointmentId = AppointmentService.getAppointmentId();
     if (appointmentId && appointmentData) {
@@ -1012,8 +993,6 @@ const VideoConsultation = () => {
   };
 
   const handleConfirmLeaveRoom = () => {
-    console.log('🔴 Confirming leave room');
-    console.log('🔴 Setting showLeaveRoomPopup to false');
     setShowLeaveRoomPopup(false);
     
     // Track manual leave room event
@@ -1043,27 +1022,21 @@ const VideoConsultation = () => {
     
     // Add a small delay to ensure state updates properly
     setTimeout(() => {
-      console.log('🔴 Setting showHealthPackages to true');
       setShowHealthPackages(true);
-      console.log('🔴 Health packages should now be visible');
     }, 100);
     
     if (zegoInstanceRef.current) {
       try {
-        console.log('🔴 Leaving Zego room');
         zegoInstanceRef.current.leaveRoom();
       } catch (error) {
         console.warn('Error leaving room:', error);
       }
     }
-    console.log('🔴 Setting callEnded to true');
     setCallEnded(true);
-    console.log('🔴 Setting zegoInitialized to false');
     setZegoInitialized(false);
   };
 
   const handleCancelLeaveRoom = () => {
-    console.log('🔴 Canceling leave room');
     setShowLeaveRoomPopup(false);
   };
 
@@ -1083,9 +1056,8 @@ const VideoConsultation = () => {
   // Customize pre-join view with participant info and button text
   const customizePreJoinView = () => {
     try {
-      console.log('🎨 Customizing pre-join view...');
-      
-      // Find and update join button text
+
+      // Find and update join button text with slight curve corners
       const buttons = document.querySelectorAll('button');
       buttons.forEach(button => {
         if (button.textContent && (
@@ -1093,13 +1065,12 @@ const VideoConsultation = () => {
           button.textContent.toLowerCase().includes('start') ||
           button.textContent.toLowerCase().includes('enter')
         )) {
-          console.log('🎯 Found join button, updating text to "Join Teleconsultation"');
           button.textContent = 'Join Teleconsultation';
           button.style.background = 'linear-gradient(135deg, #A23293, #EE2D67)';
           button.style.color = 'white';
           button.style.fontFamily = "'Poppins', sans-serif";
           button.style.fontWeight = '600';
-          button.style.borderRadius = '8px';
+          button.style.borderRadius = '20px'; // More rounded corners
           button.style.padding = '12px 24px';
           button.style.border = 'none';
           button.style.cursor = 'pointer';
@@ -1109,8 +1080,52 @@ const VideoConsultation = () => {
         }
       });
       
-      // Add participant information section
-      // Try multiple selectors to find the pre-join container
+      // Try to find and modify existing Zego participant elements
+      const modifyExistingElements = () => {
+        // Look for existing participant or user elements
+        const participantElements = document.querySelectorAll('[class*="participant"], [class*="user"], [class*="member"], [class*="attendee"], [class*="avatar"]');
+        
+        participantElements.forEach((element, index) => {
+          // Apply rounded styling to existing elements
+          element.style.borderRadius = '20px !important';
+          element.style.background = 'linear-gradient(135deg, rgba(162, 50, 147, 0.08), rgba(238, 45, 103, 0.08)) !important';
+          element.style.border = '1px solid rgba(162, 50, 147, 0.15) !important';
+          element.style.padding = '16px !important';
+          element.style.boxShadow = '0 3px 10px rgba(162, 50, 147, 0.08) !important';
+          
+          // Find and modify any circular elements (avatars/icons)
+          const circularElements = element.querySelectorAll('[class*="circle"], [class*="avatar"], [class*="icon"]');
+          circularElements.forEach(circle => {
+            circle.style.borderRadius = '50% !important';
+            circle.style.overflow = 'hidden !important';
+            circle.style.width = '40px !important';
+            circle.style.height = '40px !important';
+          });
+        });
+        
+        // Also look for any divs that might be participant containers
+        const allDivs = document.querySelectorAll('div');
+        allDivs.forEach(div => {
+          const computedStyle = window.getComputedStyle(div);
+          const hasGradient = computedStyle.background.includes('gradient') || 
+                            computedStyle.background.includes('rgb') ||
+                            div.style.background.includes('gradient');
+          
+          // If it looks like a participant container, apply our styling
+          if (hasGradient && div.children.length > 0) {
+            div.style.borderRadius = '20px !important';
+            div.style.background = 'linear-gradient(135deg, rgba(162, 50, 147, 0.08), rgba(238, 45, 103, 0.08)) !important';
+            div.style.border = '1px solid rgba(162, 50, 147, 0.15) !important';
+            div.style.padding = '16px !important';
+            div.style.boxShadow = '0 3px 10px rgba(162, 50, 147, 0.08) !important';
+          }
+        });
+      };
+      
+      // Try to modify existing elements first
+      modifyExistingElements();
+      
+      // Also try to add our custom section as a fallback
       let prejoinContainer = document.querySelector('[class*="prejoin"], [class*="Prejoin"], [class*="zego"], [class*="PreJoin"]');
       
       // If not found, try to find any container with buttons
@@ -1119,7 +1134,6 @@ const VideoConsultation = () => {
         buttons.forEach(button => {
           if (button.textContent && button.textContent.toLowerCase().includes('join')) {
             prejoinContainer = button.closest('[class*="container"], [class*="view"], [class*="panel"], [class*="content"]') || button.parentElement;
-            console.log('🔍 Found container via button:', prejoinContainer?.className);
           }
         });
       }
@@ -1127,11 +1141,8 @@ const VideoConsultation = () => {
       // Fallback to body if still not found
       if (!prejoinContainer) {
         prejoinContainer = document.body;
-        console.log('⚠️ Using body as fallback container');
       }
-      
-      console.log('🎯 Using container:', prejoinContainer?.className || 'body');
-      
+           
       if (prejoinContainer) {
         // Remove existing participant info if any
         const existingInfo = prejoinContainer.querySelector('.kauvery-participant-info');
@@ -1145,141 +1156,150 @@ const VideoConsultation = () => {
           existingFloatingInfo.remove();
         }
         
-        // Create participant info section
+        // Create participant info section with higher z-index and more prominent styling
         const participantInfo = document.createElement('div');
         participantInfo.className = 'kauvery-participant-info';
         participantInfo.style.cssText = `
-          background: transparent;
-          border: none;
-          border-radius: 0;
-          padding: 0;
-          margin: 0;
-          text-align: center;
-          font-family: 'Poppins', sans-serif;
-          box-shadow: none;
-          backdrop-filter: none;
-          position: relative;
-          z-index: 1;
-          max-width: 100%;
-          width: 100%;
-          height: fit-content;
-          max-height: 100%;
-          transform: scale(1);
-          transition: all 0.3s ease;
-          align-self: center;
+          background: rgba(255, 255, 255, 0.95) !important;
+          border: 2px solid rgba(162, 50, 147, 0.2) !important;
+          border-radius: 20px !important;
+          padding: 20px !important;
+          margin: 20px auto !important;
+          text-align: center !important;
+          font-family: 'Poppins', sans-serif !important;
+          box-shadow: 0 8px 25px rgba(162, 50, 147, 0.15) !important;
+          backdrop-filter: blur(10px) !important;
+          position: relative !important;
+          z-index: 9999 !important;
+          max-width: 400px !important;
+          width: 90% !important;
+          height: fit-content !important;
+          transform: scale(1) !important;
+          transition: all 0.3s ease !important;
+          align-self: center !important;
           justify-self: center !important;
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
         `;
         
         // Get appointment details for display
-        const doctorName = appointmentData?.doctorName || '';
-        const department = appointmentData?.department || 'General Medicine';
-        const patientName = appointmentData?.username || '';
+        const doctorName = globalParsedParams? globalParsedParams.doctorname : '';
+        const department = globalParsedParams? globalParsedParams.speciality : '';
+        const patientName = globalParsedParams? globalParsedParams.username : '';
         
-                participantInfo.innerHTML = `
+        participantInfo.innerHTML = `
           <div style="
             display: flex;
             flex-direction: column;
             gap: 20px;
             text-align: center;
             width: 100%;
-            max-width: 400px;
-            margin: 0 auto;
           ">
-            <!-- Welcome Text -->      
-            
             <!-- Patient Details Section -->
             <div style="
               display: flex;
               flex-direction: row;
-              gap: 16px;
-              margin-left: 20px;
+              gap: 20px;
+              justify-content: center;
+              align-items: center;
             ">
               <!-- Doctor Info -->
               <div style="
-                background: linear-gradient(135deg, rgba(162, 50, 147, 0.08), rgba(238, 45, 103, 0.08));
-                border: 1px solid rgba(162, 50, 147, 0.15);
-                border-radius: 14px;
-                padding: 18px;
-                transition: all 0.3s ease;
-                box-shadow: 0 3px 10px rgba(162, 50, 147, 0.08);
-                display: flex;
-                align-items: center;
-                gap: 14px;
+                background: linear-gradient(135deg, rgba(162, 50, 147, 0.1), rgba(238, 45, 103, 0.1)) !important;
+                border: 2px solid rgba(162, 50, 147, 0.2) !important;
+                border-radius: 25px !important;
+                padding: 20px !important;
+                transition: all 0.3s ease !important;
+                box-shadow: 0 4px 15px rgba(162, 50, 147, 0.1) !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                gap: 10px !important;
+                min-width: 130px !important;
+                width: 130px !important;
+                height: auto !important;
               ">
                 <div style="
-                  width: 45px;
-                  height: 45px;
-                  background: linear-gradient(135deg, #A23293, #EE2D67);
-                  border-radius: 50%;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  box-shadow: 0 3px 8px rgba(162, 50, 147, 0.2);
-                  flex-shrink: 0;
+                  width: 50px !important;
+                  height: 50px !important;
+                  background: linear-gradient(135deg, #A23293, #EE2D67) !important;
+                  border-radius: 50% !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  box-shadow: 0 4px 12px rgba(162, 50, 147, 0.3) !important;
+                  flex-shrink: 0 !important;
+                  overflow: hidden !important;
                 ">
-                  <span style="font-size: 20px; color: white;">👨‍⚕️</span>
+                  <span style="font-size: 24px; color: white;">👨‍⚕️</span>
                 </div>
-                <div style="flex: 1; text-align: left;">
+                <div style="text-align: center;">
                   <p style="
-                    color: #A23293;
-                    font-size: 11px;
-                    font-weight: 700;
-                    margin: 0 0 5px 0;
-                    text-transform: uppercase;
-                    letter-spacing: 0.3px;
-                    font-family: 'Poppins', sans-serif;
+                    color: #A23293 !important;
+                    font-size: 11px !important;
+                    font-weight: 700 !important;
+                    margin: 0 0 5px 0 !important;
+                    text-transform: uppercase !important;
+                    letter-spacing: 0.5px !important;
+                    font-family: 'Poppins', sans-serif !important;
                   ">Doctor</p>
                   <p style="
-                    color: #333;
-                    font-size: 15px;
-                    font-weight: 600;
-                    margin: 0;
-                    font-family: 'Poppins', sans-serif;
+                    color: #333 !important;
+                    font-size: 14px !important;
+                    font-weight: 600 !important;
+                    margin: 0 !important;
+                    font-family: 'Poppins', sans-serif !important;
                   ">${doctorName}</p>
                 </div>
               </div>
               
               <!-- Patient Info -->
               <div style="
-                background: linear-gradient(135deg, rgba(162, 50, 147, 0.08), rgba(238, 45, 103, 0.08));
-                border: 1px solid rgba(162, 50, 147, 0.15);
-                border-radius: 14px;
-                padding: 18px;
-                transition: all 0.3s ease;
-                box-shadow: 0 3px 10px rgba(162, 50, 147, 0.08);
-                display: flex;
-                align-items: center;
-                gap: 14px;
+                background: linear-gradient(135deg, rgba(162, 50, 147, 0.1), rgba(238, 45, 103, 0.1)) !important;
+                border: 2px solid rgba(162, 50, 147, 0.2) !important;
+                border-radius: 25px !important;
+                padding: 20px !important;
+                transition: all 0.3s ease !important;
+                box-shadow: 0 4px 15px rgba(162, 50, 147, 0.1) !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                gap: 10px !important;
+                min-width: 130px !important;
+                width: 130px !important;
+                height: auto !important;
               ">
                 <div style="
-                  width: 45px;
-                  height: 45px;
-                  background: linear-gradient(135deg, #A23293, #EE2D67);
-                  border-radius: 50%;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  box-shadow: 0 3px 8px rgba(162, 50, 147, 0.2);
-                  flex-shrink: 0;
+                  width: 50px !important;
+                  height: 50px !important;
+                  background: linear-gradient(135deg, #A23293, #EE2D67) !important;
+                  border-radius: 50% !important;
+                  display: flex !important;
+                  align-items: center !important;
+                  justify-content: center !important;
+                  box-shadow: 0 4px 12px rgba(162, 50, 147, 0.3) !important;
+                  flex-shrink: 0 !important;
+                  overflow: hidden !important;
                 ">
-                  <span style="font-size: 20px; color: white;">👤</span>
+                  <span style="font-size: 24px; color: white;">👤</span>
                 </div>
-                <div style="flex: 1; text-align: left;">
+                <div style="text-align: center;">
                   <p style="
-                    color: #A23293;
-                    font-size: 11px;
-                    font-weight: 700;
-                    margin: 0 0 5px 0;
-                    text-transform: uppercase;
-                    letter-spacing: 0.3px;
-                    font-family: 'Poppins', sans-serif;
+                    color: #A23293 !important;
+                    font-size: 11px !important;
+                    font-weight: 700 !important;
+                    margin: 0 0 5px 0 !important;
+                    text-transform: uppercase !important;
+                    letter-spacing: 0.5px !important;
+                    font-family: 'Poppins', sans-serif !important;
                   ">Patient</p>
                   <p style="
-                    color: #333;
-                    font-size: 15px;
-                    font-weight: 600;
-                    margin: 0;
-                    font-family: 'Poppins', sans-serif;
+                    color: #333 !important;
+                    font-size: 14px !important;
+                    font-weight: 600 !important;
+                    margin: 0 !important;
+                    font-family: 'Poppins', sans-serif !important;
                   ">${patientName}</p>
                 </div>
               </div>
@@ -1287,49 +1307,49 @@ const VideoConsultation = () => {
             
             <!-- Real-time Room Status -->
             <div id="room-status" style="
-              background: linear-gradient(135deg, rgba(40, 167, 69, 0.12), rgba(40, 167, 69, 0.08));
-              border: 1px solid rgba(40, 167, 69, 0.25);
-              border-radius: 12px;
-              padding: 16px;
-              position: relative;
-              overflow: hidden;
-              box-shadow: 0 3px 10px rgba(40, 167, 69, 0.1);
+              background: linear-gradient(135deg, rgba(40, 167, 69, 0.15), rgba(40, 167, 69, 0.1)) !important;
+              border: 2px solid rgba(40, 167, 69, 0.3) !important;
+              border-radius: 20px !important;
+              padding: 18px !important;
+              position: relative !important;
+              overflow: hidden !important;
+              box-shadow: 0 4px 15px rgba(40, 167, 69, 0.15) !important;
             ">
               <div style="
                 position: absolute;
                 top: 0;
                 left: 0;
                 right: 0;
-                height: 2px;
+                height: 3px;
                 background: linear-gradient(90deg, #28a745, #20c997);
               "></div>
               <div id="status-content" style="
-                color: #155724;
-                font-size: 12px;
-                margin: 0;
-                font-family: 'Poppins', sans-serif;
-                font-weight: 600;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 8px;
+                color: #155724 !important;
+                font-size: 13px !important;
+                margin: 0 !important;
+                font-family: 'Poppins', sans-serif !important;
+                font-weight: 600 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 10px !important;
               ">
                 <span style="
-                  width: 8px;
-                  height: 8px;
-                  background: linear-gradient(135deg, #28a745, #20c997);
-                  border-radius: 50%;
-                  display: inline-block;
-                  animation: pulse 2s infinite;
-                  box-shadow: 0 0 6px rgba(40, 167, 69, 0.3);
+                  width: 10px !important;
+                  height: 10px !important;
+                  background: linear-gradient(135deg, #28a745, #20c997) !important;
+                  border-radius: 50% !important;
+                  display: inline-block !important;
+                  animation: pulse 2s infinite !important;
+                  box-shadow: 0 0 8px rgba(40, 167, 69, 0.4) !important;
                 "></span>
                 <span id="status-text">🟢 Checking room status...</span>
               </div>
               <div id="participants-list" style="
-                margin-top: 12px;
+                margin-top: 15px;
                 display: none;
                 flex-direction: column;
-                gap: 8px;
+                gap: 10px;
               ">
                 <!-- Participants will be dynamically added here -->
               </div>
@@ -1337,121 +1357,33 @@ const VideoConsultation = () => {
           </div>
         `;
         
-        // Add pulse animation
-        const style = document.createElement('style');
-        style.textContent = `
-          @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-          }
-        `;
-        document.head.appendChild(style);
-        
-                // Insert consultation details directly into the Zego pre-join container
-        try {
-          // Check if consultation details already exist to prevent duplicates
-          const existingInfo = document.querySelector('.kauvery-participant-info');
-          if (existingInfo) {
-            console.log('⚠️ Consultation details already exist, skipping creation');
-            return;
-          }
-          
-          // Find the Zego pre-join container
-          let prejoinContainer = document.querySelector('[class*="prejoin"], [class*="Prejoin"], [class*="zego"], [class*="PreJoin"]');
-          
-          if (!prejoinContainer) {
-            // If not found, try to find any container with buttons
-            const buttons = document.querySelectorAll('button');
-            buttons.forEach(button => {
-              if (button.textContent && button.textContent.toLowerCase().includes('join')) {
-                prejoinContainer = button.closest('[class*="container"], [class*="view"], [class*="panel"], [class*="content"]') || button.parentElement;
-                console.log('🔍 Found container via button:', prejoinContainer?.className);
-              }
-            });
-          }
-          
-          // Fallback to body if still not found
-          if (!prejoinContainer) {
-            prejoinContainer = document.body;
-            console.log('⚠️ Using body as fallback container');
-          }
-          
-          if (prejoinContainer) {
-                    // Insert the participant info directly into the pre-join container
+        // Insert the participant info
         prejoinContainer.appendChild(participantInfo);
-        console.log('✅ Consultation details inserted directly into Zego pre-join container');
         
-              // Start monitoring room status
-      updateRoomStatus();
-      
-      // Force remove borders immediately
-      forceRemoveBorders();
-          }
-        } catch (error) {
-          console.log('⚠️ Error inserting consultation details:', error);
-        }
+        // Start monitoring room status
+        updateRoomStatus();
         
-        // Hide any existing Zego content that might conflict
-        const existingTitles = prejoinContainer.querySelectorAll('h1, h2, h3, [class*="title"], [class*="header"]');
-        existingTitles.forEach(title => {
-          if (title.textContent && (
-            title.textContent.toLowerCase().includes('welcome') ||
-            title.textContent.toLowerCase().includes('join') ||
-            title.textContent.toLowerCase().includes('meeting')
-          )) {
-            console.log('🔄 Hiding existing title:', title.textContent);
-            title.style.display = 'none';
-          }
+        // Set up a mutation observer to reapply styling when Zego updates the DOM
+        const observer = new MutationObserver(() => {
+          setTimeout(() => {
+            modifyExistingElements();
+          }, 100);
         });
         
-        // Hide any existing text boxes or content areas
-        const existingContent = prejoinContainer.querySelectorAll('[class*="content"], [class*="text"], [class*="description"]');
-        existingContent.forEach(content => {
-          if (content.textContent && content.textContent.length > 50) {
-            console.log('🔄 Hiding existing content:', content.textContent.substring(0, 50) + '...');
-            content.style.display = 'none';
-          }
+        observer.observe(prejoinContainer, {
+          childList: true,
+          subtree: true,
+          attributes: true
         });
-
-        // Hide patient name input field and related elements
-        const inputFields = prejoinContainer.querySelectorAll('input[type="text"], input[placeholder*="name"], input[placeholder*="Name"], [class*="input"], [class*="textbox"]');
-        inputFields.forEach(input => {
-          console.log('🔄 Hiding patient name input field:', input.placeholder || input.className);
-          input.style.display = 'none';
-          
-          // Also hide the parent container if it's just for the input
-          const parent = input.parentElement;
-          if (parent && (parent.className.includes('input') || parent.className.includes('textbox') || parent.className.includes('field'))) {
-            parent.style.display = 'none';
-          }
-        });
-
-        // Hide labels related to patient name input
-        const labels = prejoinContainer.querySelectorAll('label, [class*="label"]');
-        labels.forEach(label => {
-          if (label.textContent && (
-            label.textContent.toLowerCase().includes('name') ||
-            label.textContent.toLowerCase().includes('username') ||
-            label.textContent.toLowerCase().includes('enter')
-          )) {
-            console.log('🔄 Hiding patient name label:', label.textContent);
-            label.style.display = 'none';
-          }
-        });
+        
+        // Store observer reference for cleanup
+        observerRef.current = observer;
       }
       
-              console.log('🎨 Pre-join view customization complete');
-        
-        // Prevent multiple executions by checking if already processed
-        if (document.querySelector('.kauvery-participant-info')) {
-          console.log('⚠️ Consultation details already exist, skipping duplicate creation');
-          return;
-        }
-        
-      } catch (error) {
-        console.warn('⚠️ Error customizing pre-join view:', error);
-      }
+      // ... rest of the existing code ...
+    } catch (error) {
+      console.warn('⚠️ Error customizing pre-join view:', error);
+    }
   };
   
   // Force remove all borders from pre-join view
@@ -1492,7 +1424,6 @@ const VideoConsultation = () => {
       const participantsList = document.getElementById('participants-list');
       
       if (!statusText || !participantsList) {
-        console.log('⚠️ Status elements not found, retrying...');
         setTimeout(updateRoomStatus, 1000);
         return;
       }
@@ -1577,7 +1508,6 @@ const VideoConsultation = () => {
       setTimeout(updateRoomStatus, 2000);
       
     } catch (error) {
-      console.log('⚠️ Error updating room status:', error.message);
       // Retry after error
       setTimeout(updateRoomStatus, 3000);
     }
@@ -1795,7 +1725,6 @@ const VideoConsultation = () => {
       `;
       
       document.body.appendChild(floatingInfo);
-      console.log('✅ Floating participant info created');
       
     } catch (error) {
       console.warn('⚠️ Error creating floating participant info:', error);
@@ -2334,7 +2263,6 @@ const VideoConsultation = () => {
                   if (button.textContent && (button.textContent.toLowerCase().includes('join') || 
                       button.textContent.toLowerCase().includes('start') || 
                       button.textContent.toLowerCase().includes('enter'))) {
-                    console.log('🎯 Found join button, applying gradient styles and updating text');
                     
                     // Update button text
                     button.textContent = 'Join Teleconsultation';
@@ -2375,8 +2303,7 @@ const VideoConsultation = () => {
 
                 // Check if any input fields were added and hide them
                 const inputFields = node.querySelectorAll ? node.querySelectorAll('input[type="text"], input[placeholder*="name"], input[placeholder*="Name"], [class*="input"], [class*="textbox"]') : [];
-                inputFields.forEach(input => {
-                  console.log('🎯 Found input field, hiding it:', input.placeholder || input.className);
+                inputFields.forEach(input => {                  
                   input.style.display = 'none';
                   
                   // Also hide the parent container if it's just for the input
@@ -2393,8 +2320,7 @@ const VideoConsultation = () => {
                     label.textContent.toLowerCase().includes('name') ||
                     label.textContent.toLowerCase().includes('username') ||
                     label.textContent.toLowerCase().includes('enter')
-                  )) {
-                    console.log('🎯 Found label, hiding it:', label.textContent);
+                  )) {                    
                     label.style.display = 'none';
                   }
                 });
@@ -2402,8 +2328,7 @@ const VideoConsultation = () => {
                 // Check if any titles were added and change their color
                 const titles = node.querySelectorAll ? node.querySelectorAll('h1, h2, h3, [class*="title"], [class*="header"], [class*="welcome"]') : [];
                 titles.forEach(title => {
-                  if (title.textContent && title.textContent.toLowerCase().includes('welcome')) {
-                    console.log('🎯 Found welcome title, changing color:', title.textContent);
+                  if (title.textContent && title.textContent.toLowerCase().includes('welcome')) {                    
                     title.style.color = '#962067';
                     title.style.fontFamily = "'Poppins', sans-serif";
                     title.style.fontWeight = '600';
@@ -2414,8 +2339,7 @@ const VideoConsultation = () => {
                 // More aggressive title color application
                 const welcomeElements = node.querySelectorAll ? node.querySelectorAll('*') : [];
                 welcomeElements.forEach(element => {
-                  if (element.textContent && element.textContent.toLowerCase().includes('welcome')) {
-                    console.log('🎯 Found element with welcome text, changing color:', element.textContent);
+                  if (element.textContent && element.textContent.toLowerCase().includes('welcome')) {             
                     element.style.color = '#962067';
                     element.style.fontFamily = "'Poppins', sans-serif";
                     element.style.fontWeight = '600';
@@ -2429,7 +2353,6 @@ const VideoConsultation = () => {
                   allWelcomeElements.forEach(element => {
                     if (element.textContent && element.textContent.toLowerCase().includes('welcome') && 
                         element.closest('.zego-prejoin-view')) {
-                      console.log('🎯 Found welcome element in document, changing color:', element.textContent);
                       element.style.color = '#962067';
                       element.style.fontFamily = "'Poppins', sans-serif";
                       element.style.fontWeight = '600';
@@ -2440,8 +2363,7 @@ const VideoConsultation = () => {
 
                 // Check for Zego quit/end call elements and hide them
                 const quitElements = node.querySelectorAll ? node.querySelectorAll('[class*="quit"], [class*="Quit"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"]') : [];
-                quitElements.forEach(element => {
-                  console.log('🚫 Found Zego quit element, hiding it:', element.className);
+                quitElements.forEach(element => {                 
                   element.style.display = 'none';
                   element.style.visibility = 'hidden';
                   element.style.opacity = '0';
@@ -2458,8 +2380,7 @@ const VideoConsultation = () => {
                     button.textContent.toLowerCase().includes('hang up') ||
                     button.textContent.toLowerCase().includes('end') ||
                     button.textContent.toLowerCase().includes('exit')
-                  )) {
-                    console.log('🔴 Found end call button, redirecting to our handler:', button.textContent);
+                  )) {                    
                     button.onclick = (e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -2483,8 +2404,7 @@ const VideoConsultation = () => {
                   node.className.toLowerCase().includes('modal') ||
                   node.className.toLowerCase().includes('dialog') ||
                   node.className.toLowerCase().includes('overlay')
-                )) {
-                  console.log('🚫 Found Zego popup/modal, hiding it:', node.className);
+                )) {                  
                   node.style.display = 'none';
                   node.style.visibility = 'hidden';
                   node.style.opacity = '0';
@@ -2497,16 +2417,14 @@ const VideoConsultation = () => {
                   node.textContent.toLowerCase().includes('call ended') ||
                   node.textContent.toLowerCase().includes('consultation ended') ||
                   node.textContent.toLowerCase().includes('return to home')
-                )) {
-                  console.log('🚫 Found call ended text, hiding element:', node.textContent);
+                )) {                  
                   node.style.display = 'none';
                   node.style.visibility = 'hidden';
                   node.style.opacity = '0';
                   node.style.pointerEvents = 'none';
                   
                   // Trigger our custom call ended page
-                  if (!callEnded) {
-                    console.log('🔄 Triggering custom call ended page');
+                  if (!callEnded) {                    
                     setCallEnded(true);
                   }
                 }
@@ -2522,15 +2440,12 @@ const VideoConsultation = () => {
         subtree: true
       });
       
-      console.log('✅ Custom styles applied - Poppins font and join button gradient with MutationObserver');
-      
       // Function to force update title color
       const forceUpdateTitleColor = () => {
         const titleElements = document.querySelectorAll('*');
         titleElements.forEach(element => {
           if (element.textContent && element.textContent.toLowerCase().includes('welcome') && 
-              element.closest('.zego-prejoin-view')) {
-            console.log('🎯 Force updating welcome title color:', element.textContent);
+              element.closest('.zego-prejoin-view')) {            
             element.style.color = '#962067';
             element.style.fontFamily = "'Poppins', sans-serif";
             element.style.fontWeight = '600';
@@ -2548,7 +2463,6 @@ const VideoConsultation = () => {
         const quitElements = document.querySelectorAll('[class*="quit"], [class*="Quit"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"]');
         quitElements.forEach(element => {
           if (element.style.display !== 'none') {
-            console.log('🚫 Hiding Zego quit element:', element.className);
             element.style.display = 'none';
             element.style.visibility = 'hidden';
             element.style.opacity = '0';
@@ -2560,7 +2474,6 @@ const VideoConsultation = () => {
         const popupElements = document.querySelectorAll('[class*="popup"], [class*="modal"], [class*="dialog"], [class*="overlay"], [class*="Popup"], [class*="Modal"], [class*="Dialog"], [class*="Overlay"]');
         popupElements.forEach(element => {
           if (element.style.display !== 'none' && !element.classList.contains('kauvery-confirm-button')) {
-            console.log('🚫 Hiding Zego popup/modal:', element.className);
             element.style.display = 'none';
             element.style.visibility = 'hidden';
             element.style.opacity = '0';
@@ -2576,8 +2489,7 @@ const VideoConsultation = () => {
             element.textContent.toLowerCase().includes('call ended') ||
             element.textContent.toLowerCase().includes('consultation ended') ||
             element.textContent.toLowerCase().includes('return to home')
-          )) {
-            console.log('🚫 Hiding call ended text:', element.textContent);
+          )) {            
             element.style.display = 'none';
             element.style.visibility = 'hidden';
             element.style.opacity = '0';
@@ -2585,7 +2497,6 @@ const VideoConsultation = () => {
             
             // Trigger our custom call ended page
             if (!callEnded) {
-              console.log('🔄 Triggering custom call ended page from periodic check');
               setCallEnded(true);
             }
           }
@@ -2607,7 +2518,6 @@ const VideoConsultation = () => {
         window.customizePreJoinView = customizePreJoinView;
         window.forceUpdateTitleColor = forceUpdateTitleColor;
         window.handleEndCall = handleEndCall;
-        console.log('🔧 Debug functions available: customizePreJoinView(), forceUpdateTitleColor(), handleEndCall()');
       
     } catch (error) {
       console.warn('⚠️ Error applying custom styles:', error);
@@ -2617,47 +2527,28 @@ const VideoConsultation = () => {
   // Initialize Zego with Kauvery styling (called directly on page load)
   const initializeZego = async () => {
     try {
-      console.log('🔍 Debug: initializeZego called');
-      console.log('🔍 Debug: Current state - zegoInitialized:', zegoInitialized);
-      console.log('🔍 Debug: Current state - zegoInstanceRef.current:', !!zegoInstanceRef.current);
-      console.log('🔍 Debug: Current state - appointmentData:', appointmentData);
-      
       // Enhanced prevention of multiple initializations
       if (zegoInitialized || zegoInstanceRef.current || document.querySelector('[class*="zego"]')) {
-        console.log('⚠️ Zego already initialized, skipping...');
         return;
       }
 
       // Safety check for appointment data
       if (!appointmentData || !appointmentData.roomId || !appointmentData.userid || !appointmentData.username) {
-        console.log('⏳ Waiting for appointment data...');
-        console.log('🔍 Debug: Missing appointment data -', {
-          hasAppointmentData: !!appointmentData,
-          hasRoomId: !!(appointmentData && appointmentData.roomId),
-          hasUserid: !!(appointmentData && appointmentData.userid),
-          hasUsername: !!(appointmentData && appointmentData.username)
-        });
+       
         setTimeout(initializeZego, 500);
         return;
       }
 
       // Wait for container to be ready
       if (!zegoContainerRef.current) {
-        console.log('⏳ Waiting for container...');
-        console.log('🔍 Debug: Container not ready - zegoContainerRef.current:', zegoContainerRef.current);
         setTimeout(initializeZego, 500);
         return;
       }
-
-      console.log('🚀 Starting Zego initialization...');
+      
       setInitializationError(null);
 
       // Check Zego credentials first
       const { appId: appID, serverSecret } = getZegoCredentials();
-      console.log('🔍 Debug: Zego credentials check:', { 
-        appID: appID ? 'Set' : 'Missing', 
-        serverSecret: serverSecret ? 'Set' : 'Missing' 
-      });
       
       if (!appID || !serverSecret) {
         throw new Error('Zego credentials are missing. Please check your environment variables.');
@@ -2667,21 +2558,12 @@ const VideoConsultation = () => {
       const numericAppID = parseInt(appID, 10);
       if (isNaN(numericAppID)) {
         throw new Error(`Invalid appID: ${appID}. Must be a valid number.`);
-      }
-      
-      console.log('🔍 Debug: AppID conversion:', { original: appID, numeric: numericAppID });
-      
-      console.log('🔍 Debug: Importing ZegoUIKitPrebuilt...');
-      
+      }      
       // Try different import approaches
       let ZegoUIKitPrebuilt;
       try {
         const zegoModule = await import('@zegocloud/zego-uikit-prebuilt');
-        console.log('🔍 Debug: Full zegoModule:', zegoModule);
         ZegoUIKitPrebuilt = zegoModule.ZegoUIKitPrebuilt || zegoModule.default || zegoModule;
-        console.log('🔍 Debug: ZegoUIKitPrebuilt imported successfully');
-        console.log('🔍 Debug: ZegoUIKitPrebuilt object:', ZegoUIKitPrebuilt);
-        console.log('🔍 Debug: Available methods:', Object.keys(ZegoUIKitPrebuilt || {}));
       } catch (importError) {
         console.error('❌ Error importing ZegoUIKitPrebuilt:', importError);
         throw new Error(`Failed to import ZegoUIKitPrebuilt: ${importError.message}`);
@@ -2689,25 +2571,7 @@ const VideoConsultation = () => {
       
       if (!ZegoUIKitPrebuilt) {
         throw new Error('ZegoUIKitPrebuilt is undefined after import');
-      }
-      
-      console.log('🔍 Debug: ZegoUIKitPrebuilt.create method:', typeof ZegoUIKitPrebuilt.create);
-      console.log('🔍 Debug: ZegoUIKitPrebuilt.generateKitTokenForTest method:', typeof ZegoUIKitPrebuilt.generateKitTokenForTest);
-      
-      console.log('🔍 Debug: Using Zego credentials from environment:', { 
-        appID: numericAppID, 
-        serverSecret: serverSecret.substring(0, 10) + '...' 
-      });
-      
-      console.log('🔍 Debug: Generating kit token...');
-      
-      // Add debugging before token generation (around line 2700)
-      console.log('🔍 Debug: Token generation parameters:');
-      console.log('🔍 - numericAppID:', numericAppID);
-      console.log('🔍 - serverSecret:', serverSecret ? 'exists' : 'missing');
-      console.log('🔍 - roomId:', appointmentData.roomId);
-      console.log('🔍 - userid:', appointmentData.userid);
-      console.log('🔍 - username:', appointmentData.username);
+      }      
       
       // Try different token generation methods
       let kitToken;
@@ -2731,11 +2595,6 @@ const VideoConsultation = () => {
         throw new Error('No token generation method found in ZegoUIKitPrebuilt');
       }
       
-      console.log('🔍 Debug: Kit token generated:', kitToken.substring(0, 20) + '...');
-
-      console.log('🔍 Debug: Creating Zego instance...');
-      console.log('🔍 Debug: Kit token for create:', kitToken);
-      
       if (!ZegoUIKitPrebuilt.create) {
         throw new Error('ZegoUIKitPrebuilt.create method is not available');
       }
@@ -2749,8 +2608,6 @@ const VideoConsultation = () => {
         throw new Error(`Failed to create Zego instance: ${createError.message}`);
       }
       
-      console.log('🔍 Debug: Zego instance created:', zp);
-      
       if (!zp) {
         throw new Error('Failed to create Zego instance - zp is undefined');
       }
@@ -2761,14 +2618,10 @@ const VideoConsultation = () => {
       }
       
       zegoInstanceRef.current = zp;
-      console.log('🔍 Debug: Zego instance created successfully');
 
       // Join room with pre-join screen (original Zego interface)
-      console.log('🔗 Joining room with ID:', appointmentData.roomId);
-      console.log('🔍 Debug: Container element:', zegoContainerRef.current);
       
       try {
-        console.log('🔍 Debug: Calling zp.joinRoom...');
         await zp.joinRoom({
           container: zegoContainerRef.current,
           scenario: {
@@ -2785,8 +2638,7 @@ const VideoConsultation = () => {
             }
           },
           onJoinRoom: () => {
-            console.log('✅ Successfully joined Kauvery Hospital consultation room');
-            
+                        
             // Track connection event
             handleConnectionEvent('connected', { 
               room_id: appointmentData.roomId,
@@ -2822,13 +2674,10 @@ const VideoConsultation = () => {
             
             // Use longer timeout to ensure pre-join to video transition is complete
             setTimeout(() => {
-              setZegoInitialized(true);
-              console.log('🔄 Zego initialization state updated - pre-join to video transition complete');
+              setZegoInitialized(true);              
             }, 500);
           },
-          onLeaveRoom: () => {
-            console.log('👋 Left consultation room');
-            
+          onLeaveRoom: () => {            
             // Track connection event
             handleConnectionEvent('disconnected', { 
               room_id: appointmentData.roomId,
@@ -2867,24 +2716,21 @@ const VideoConsultation = () => {
             console.error('❌ Zego join room error:', error);
             setInitializationError(error);
           },
-                  onPreJoinViewReady: () => {
-          console.log('🎯 Pre-join view is ready - join page loaded successfully');
+                  onPreJoinViewReady: () => {          
           // Customize the join button text and add participant info
           setTimeout(() => {
             customizePreJoinView();
           }, 500);
         },
         onJoinRoomSuccess: () => {
-          console.log('🎉 Join room success - transitioning to video interface');
+          
         },
         // Additional event listeners for connection tracking
         onUserUpdate: (userList) => {
-          console.log('👥 User list updated:', userList);
           setParticipantCount(userList.length);
           
           // Check if both patient and doctor are in the room (2 or more participants)
           if (userList.length >= 2 && !appointmentStored && appointmentData) {
-            console.log('👥 Both patient and doctor are in the room - storing appointment data');
             
             // Store appointment data when both participants are connected
             const appointmentToStore = {
@@ -2899,7 +2745,6 @@ const VideoConsultation = () => {
             
             AppointmentService.storeAppointment(appointmentToStore)
               .then(result => {
-                console.log('✅ Appointment stored successfully when both participants joined:', result);
                 setAppointmentStored(true);
                 
                 // Store appointment ID for future use
@@ -2919,7 +2764,6 @@ const VideoConsultation = () => {
         },
         
         onRoomStateUpdate: (roomState) => {
-          console.log('🏠 Room state updated:', roomState);
           
           if (roomState.reason === 'Reconnecting' || roomState.reason === 'RECONNECTING') {
             handleConnectionEvent('reconnecting', { 
@@ -2935,26 +2779,21 @@ const VideoConsultation = () => {
         },
         
         onNetworkQuality: (quality) => {
-          console.log('📶 Network quality:', quality);
           trackVideoCallEvent('network_quality_update', { 
             quality: quality,
             timestamp: new Date().toISOString()
           });
         }
         });
-              console.log('🔍 Debug: zp.joinRoom completed successfully');
     } catch (joinError) {
       console.error('❌ Error during room join:', joinError);
       setInitializationError(joinError.message || 'Failed to join room');
       throw joinError;
     }
 
-    console.log('✅ Zego initialization completed successfully');
-    
     // Fallback: Set initialized state if onJoinRoom doesn't trigger
     setTimeout(() => {
       if (!zegoInitialized && zegoInstanceRef.current) {
-        console.log('🔄 Fallback: Setting Zego initialized state');
         setZegoInitialized(true);
       }
     }, 2000);
@@ -3164,8 +3003,6 @@ const VideoConsultation = () => {
 
   // Access Denied Component
   const AccessDeniedPage = () => {
-    console.log('🔍 Debug: AccessDeniedPage component rendered');
-    console.log('🔍 Debug: AccessDeniedPage - accessDeniedReason:', accessDeniedReason);
     
     return (
       <div style={{
@@ -3532,8 +3369,6 @@ const VideoConsultation = () => {
 
   // Call Ended Page Component
   const CallEndedPage = () => {
-    console.log('🔍 Debug: CallEndedPage component rendered');
-    
     return (
       <div 
         className="kauvery-call-ended"
@@ -3663,28 +3498,18 @@ const VideoConsultation = () => {
   };
 
   // Show access denied page if validation failed or decryption error
-  console.log('🔍 Debug: Render check - accessDenied:', accessDenied);
-  console.log('🔍 Debug: Render check - appointmentData:', appointmentData);
-  console.log('🔍 Debug: Render check - callEnded:', callEnded);
-  console.log('🔍 Debug: Render check - decodingError:', decodingError);
   
-  if (accessDenied || decodingError) {
-    console.log('🔍 Debug: Rendering AccessDeniedPage');
+  if (accessDenied || decodingError) {    
     return <AccessDeniedPage />;
   }
 
   // Show health packages page if call ended and health packages should be shown
   if (showHealthPackages) {
-    console.log('🔍 Debug: Rendering HealthPackagesPage');
-    console.log('🔍 Debug: showHealthPackages state:', showHealthPackages);
-    console.log('🔍 Debug: callEnded state:', callEnded);
-    console.log('🔍 Debug: Health packages page should be visible now!');
     return <HealthPackagesPage />;
   }
   
   // Show call ended page if call has been completed
   if (callEnded) {
-    console.log('🔍 Debug: Rendering CallEndedPage');
     return <CallEndedPage />;
   }
 
@@ -3797,7 +3622,6 @@ const VideoConsultation = () => {
         username: appointmentData?.username
       };
 
-      console.log(`📹 Tracking ${eventType} event:`, eventPayload);
       await AppointmentService.storeVideoCallEvent(eventPayload);
     } catch (error) {
       console.error(`❌ Failed to track ${eventType} event:`, error);
@@ -3815,15 +3639,12 @@ const VideoConsultation = () => {
         username: appointmentData?.username,
         status: 'active'
       };
-
-      console.log('🎬 Starting call session:', sessionData);
       const result = await AppointmentService.startCallSession(sessionData);
       
       if (result.success) {
         setSessionId(result.session_id);
         setConnectionStartTime(new Date());
         setConnectionStatus('connected');
-        console.log('✅ Call session started successfully');
       }
     } catch (error) {
       console.error('❌ Failed to start call session:', error);
@@ -3842,15 +3663,13 @@ const VideoConsultation = () => {
         status: 'ended',
         end_reason: reason
       };
-
-      console.log('🏁 Ending call session:', sessionData);
+      
       const result = await AppointmentService.endCallSession(sessionData);
       
       if (result.success) {
         setConnectionStatus('disconnected');
         setConnectionStartTime(null);
-        setSessionId(null);
-        console.log('✅ Call session ended successfully');
+        setSessionId(null);        
       }
     } catch (error) {
       console.error('❌ Failed to end call session:', error);
@@ -3859,7 +3678,6 @@ const VideoConsultation = () => {
 
   // Function to handle connection events
   const handleConnectionEvent = (eventType, eventData = {}) => {
-    console.log(`🔗 Connection event: ${eventType}`, eventData);
     
     switch (eventType) {
       case 'connected':

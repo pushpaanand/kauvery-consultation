@@ -1,12 +1,10 @@
 // Appointment Service for handling appointment storage and video call events
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
-
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net';
+// const SERVER_URL = 'http://localhost:3001';
 class AppointmentService {
   // Store appointment data when user enters the website
   static async storeAppointment(appointmentData) {
-    try {
-      console.log('📝 Storing appointment data:', appointmentData);
-      
+    try {      
       const response = await fetch(`${SERVER_URL}/api/appointments`, {
         method: 'POST',
         headers: {
@@ -20,7 +18,6 @@ class AppointmentService {
       }
 
       const result = await response.json();
-      console.log('✅ Appointment stored successfully:', result);
       
       // Store appointment ID in session storage for future use
       if (result.appointment_id) {
@@ -37,7 +34,6 @@ class AppointmentService {
   // Store video call event
   static async storeVideoCallEvent(eventData) {
     try {
-      console.log('📹 Storing video call event:', eventData);
       
       const response = await fetch(`${SERVER_URL}/api/video-call-events`, {
         method: 'POST',
@@ -52,7 +48,6 @@ class AppointmentService {
       }
 
       const result = await response.json();
-      console.log('✅ Video call event stored successfully:', result);
       
       return result;
     } catch (error) {
@@ -63,9 +58,7 @@ class AppointmentService {
 
   // Start call session
   static async startCallSession(sessionData) {
-    try {
-      console.log('🚀 Starting call session:', sessionData);
-      
+    try {      
       const response = await fetch(`${SERVER_URL}/api/call-sessions/start`, {
         method: 'POST',
         headers: {
@@ -79,7 +72,6 @@ class AppointmentService {
       }
 
       const result = await response.json();
-      console.log('✅ Call session started successfully:', result);
       
       return result;
     } catch (error) {
@@ -90,9 +82,7 @@ class AppointmentService {
 
   // End call session
   static async endCallSession(sessionData) {
-    try {
-      console.log('⏹️ Ending call session:', sessionData);
-      
+    try {      
       const response = await fetch(`${SERVER_URL}/api/call-sessions/end`, {
         method: 'POST',
         headers: {
@@ -106,7 +96,6 @@ class AppointmentService {
       }
 
       const result = await response.json();
-      console.log('✅ Call session ended successfully:', result);
       
       return result;
     } catch (error) {
@@ -118,7 +107,6 @@ class AppointmentService {
   // Get appointment details
   static async getAppointment(appNo) {
     try {
-      console.log('🔍 Fetching appointment details for:', appNo);
       
       const response = await fetch(`${SERVER_URL}/api/appointments/${appNo}`);
 
@@ -127,7 +115,6 @@ class AppointmentService {
       }
 
       const result = await response.json();
-      console.log('✅ Appointment details fetched successfully:', result);
       
       return result;
     } catch (error) {
