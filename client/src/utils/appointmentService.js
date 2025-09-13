@@ -1,5 +1,5 @@
 // Appointment Service for handling appointment storage and video call events
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net';
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || '';
 // const SERVER_URL = 'http://localhost:3001';
 class AppointmentService {
   // Store appointment data when user enters the website
