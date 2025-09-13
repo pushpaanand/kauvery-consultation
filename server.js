@@ -4,19 +4,20 @@ const path = require('path');
 const crypto = require('crypto');
 const sql = require('mssql');
 const { DefaultAzureCredential, ClientSecretCredential } = require('@azure/identity');
+
+// Load environment variables FIRST
+require('dotenv').config();
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Load environment variables
-// require('dotenv').config();
-
 // Database configuration for Azure SQL Database
 const dbConfig = {
-  server: process.env.DB_SERVER || 'videoconsultation.database.windows.net',
-  database: process.env.DB_NAME || 'videoconsultation_db',
-  user: process.env.DB_USER || 'videoconsultation', // Updated username
-  password: process.env.DB_PASSWORD || 'kauvery@123', // Updated password
+  server: process.env.DB_SERVER,
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
   port: parseInt(process.env.DB_PORT) || 1433,
   options: {
     encrypt: true,
@@ -139,10 +140,55 @@ function decrypt(keyString, cipherTextBase64) {
   }
 }
 
-// Helper function to store appointment data
+// Function to format date for SQL Server
+const formatDateForSQL = (dateString) => {
+  try {
+    if (!dateString) return null;
+    
+    // Remove time part if present
+    const dateOnly = dateString.split(' ')[0];
+    
+    // Parse DD/MM/YYYY format
+    const [day, month, year] = dateOnly.split('/');
+    
+    // Convert to YYYY-MM-DD format (SQL Server standard)
+    const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    
+    return formattedDate;
+  } catch (error) {
+    console.error('❌ Error formatting date:', error);
+    return null;
+  }
+};
+
+// Function to format time for SQL Server
+const formatTimeForSQL = (timeString) => {
+  try {
+    if (!timeString) return null;
+    
+    // Ensure time is in HH:MM:SS format
+    if (timeString.length === 5) {
+      return `${timeString}:00`; // Add seconds if missing
+    }
+    
+    return timeString;
+  } catch (error) {
+    console.error('❌ Error formatting time:', error);
+    return null;
+  }
+};
+
+// Enhanced appointment storage with MIS tracking
 async function storeAppointment(appointmentData) {
   try {
+    console.log('📝 Server: Storing appointment data:', appointmentData);
+    
+    const pool = await sql.connect(dbConfig);
     const request = pool.request();
+    
+    // Format dates for SQL Server
+    const formattedDate = formatDateForSQL(appointmentData.appointment_date);
+    const formattedTime = formatTimeForSQL(appointmentData.appointment_time);
     
     // Check if appointment already exists
     const checkResult = await request.query(`
@@ -152,14 +198,15 @@ async function storeAppointment(appointmentData) {
     `);
     
     if (checkResult.recordset.length > 0) {
-      // Update existing appointment
-      const updateResult = await request.query(`
-        UPDATE appointments 
-        SET username = '${appointmentData.username}',
+      // Update existing appointment (remove status column)
+      await request.query(`
+        UPDATE appointments SET
+            username = '${appointmentData.username}',
+            userid = '${appointmentData.userid}',
             doctorname = '${appointmentData.doctorname}',
             speciality = '${appointmentData.speciality}',
-            appointment_date = '${appointmentData.appointment_date}',
-            appointment_time = '${appointmentData.appointment_time}',
+            appointment_date = '${formattedDate}',
+            appointment_time = '${formattedTime}',
             room_id = '${appointmentData.room_id}',
             updated_at = GETDATE()
         WHERE app_no = '${appointmentData.app_no}' 
@@ -172,15 +219,15 @@ async function storeAppointment(appointmentData) {
         message: 'Appointment updated successfully' 
       };
     } else {
-      // Insert new appointment
+      // Insert new appointment (remove status column)
       const insertResult = await request.query(`
         INSERT INTO appointments 
-        (app_no, username, userid, doctorname, speciality, appointment_date, appointment_time, room_id)
+        (app_no, username, userid, doctorname, speciality, appointment_date, appointment_time, room_id, created_at)
         VALUES 
         ('${appointmentData.app_no}', '${appointmentData.username}', '${appointmentData.userid}', 
          '${appointmentData.doctorname}', '${appointmentData.speciality}', 
-         '${appointmentData.appointment_date}', '${appointmentData.appointment_time}', 
-         '${appointmentData.room_id}')
+         '${formattedDate}', '${formattedTime}', 
+         '${appointmentData.room_id}', GETDATE())
       `);
       
       // Get the newly created appointment ID
@@ -198,20 +245,64 @@ async function storeAppointment(appointmentData) {
     }
   } catch (error) {
     console.error('❌ Server: Error storing appointment:', error);
-    return { success: false, error: error.message };
+    throw error;
   }
 }
 
-// Store video call event
+// Enhanced video call event storage with comprehensive tracking
 async function storeVideoCallEvent(eventData) {
   try {
+    console.log('📹 Server: Storing video call event:', eventData);
+    
+    const pool = await sql.connect(dbConfig);
     const request = pool.request();
     
+    // Get appointment ID
+    let appointmentId = eventData.appointment_id;
+    if (isNaN(eventData.appointment_id)) {
+      const appointmentResult = await request.query(`
+        SELECT id FROM appointments 
+        WHERE app_no = '${eventData.appointment_id}'
+      `);
+      
+      if (appointmentResult.recordset.length > 0) {
+        appointmentId = appointmentResult.recordset[0].id;
+      } else {
+        throw new Error(`Appointment not found: ${eventData.appointment_id}`);
+      }
+    }
+    
+    // Store comprehensive event data
     await request.query(`
-      INSERT INTO video_call_events (appointment_id, event_type, event_data, room_id, user_id, username)
-      VALUES (${eventData.appointment_id}, '${eventData.event_type}', '${JSON.stringify(eventData.event_data)}', 
-              '${eventData.room_id}', '${eventData.user_id}', '${eventData.username}')
+      INSERT INTO video_call_events 
+      (appointment_id, event_type, event_timestamp, event_data, room_id, user_id, username, session_id, duration_seconds, created_at)
+      VALUES 
+      (${appointmentId}, '${eventData.event_type}', 
+       '${eventData.event_timestamp || new Date().toISOString()}', 
+       '${JSON.stringify(eventData.event_data)}', 
+       '${eventData.room_id}', '${eventData.user_id}', '${eventData.username}',
+       '${eventData.session_id || ''}', 
+       ${eventData.duration_seconds || 0}, 
+       GETDATE())
     `);
+    
+    // Remove status updates since status column doesn't exist
+    // if (eventData.event_type === 'connected') {
+    //   await request.query(`
+    //     UPDATE appointments 
+    //     SET status = 'In Progress', updated_at = GETDATE()
+    //     WHERE id = ${appointmentId}
+    //   `);
+    // } else if (eventData.event_type === 'disconnected') {
+    //   await request.query(`
+    //     UPDATE appointments 
+    //     SET status = 'Completed', updated_at = GETDATE()
+    //     WHERE id = ${appointmentId}
+    //   `);
+    // }
+    
+    console.log('✅ Server: Video call event stored successfully');
+    return { success: true, appointment_id: appointmentId };
     
   } catch (err) {
     console.error('❌ Error storing video call event:', err);
@@ -245,18 +336,39 @@ async function startCallSession(sessionData) {
   }
 }
 
-// End call session
+// Fix the endCallSession function
 async function endCallSession(sessionData) {
   try {
+    console.log('🏁 Server: Ending call session:', sessionData);
+    
+    const pool = await sql.connect(dbConfig);
     const request = pool.request();
+    
+    // Get appointment ID if it's a string (appointment number)
+    let appointmentId = sessionData.appointment_id;
+    if (isNaN(sessionData.appointment_id)) {
+      const appointmentResult = await request.query(`
+        SELECT id FROM appointments 
+        WHERE app_no = '${sessionData.appointment_id}'
+      `);
+      
+      if (appointmentResult.recordset.length > 0) {
+        appointmentId = appointmentResult.recordset[0].id;
+      } else {
+        throw new Error(`Appointment not found: ${sessionData.appointment_id}`);
+      }
+    }
     
     await request.query(`
       UPDATE call_sessions 
       SET session_end = GETDATE(), 
           duration_seconds = DATEDIFF(SECOND, session_start, GETDATE()),
           status = 'ended'
-      WHERE appointment_id = ${sessionData.appointment_id} AND status = 'active'
+      WHERE appointment_id = ${appointmentId} AND status = 'active'
     `);
+    
+    console.log('✅ Server: Call session ended successfully');
+    return { success: true, appointment_id: appointmentId };
     
   } catch (err) {
     console.error('❌ Error ending call session:', err);
@@ -324,21 +436,29 @@ app.post('/api/decrypt', (req, res) => {
   }
 });
 
-// API endpoint to store appointment data
+// Add debugging to the /api/appointments endpoint
 app.post('/api/appointments', async (req, res) => {
   try {
+    console.log(' Server: /api/appointments endpoint called');
+    console.log('📞 Server: Request body:', req.body);
+    
     const appointmentData = req.body;
     
     // Validate required fields
     if (!appointmentData.app_no || !appointmentData.username || !appointmentData.userid) {
+      console.log('❌ Server: Missing required fields');
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: app_no, username, userid'
       });
     }
     
+    console.log('✅ Server: Required fields validated, calling storeAppointment');
+    
     // Store appointment in database
     const result = await storeAppointment(appointmentData);
+    
+    console.log('📊 Server: storeAppointment result:', result);
     
     if (result.success) {
       res.json({
@@ -374,13 +494,20 @@ app.post('/api/video-call-events', async (req, res) => {
       });
     }
     
-    await storeVideoCallEvent(eventData);
+    const result = await storeVideoCallEvent(eventData);
     
-    res.json({
-      success: true,
-      message: 'Video call event stored successfully',
-      timestamp: new Date().toISOString()
-    });
+    if (result.success) {
+      res.json({
+        success: true,
+        appointment_id: result.appointment_id,
+        message: 'Video call event stored successfully'
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: result.message
+      });
+    }
     
   } catch (error) {
     console.error('❌ Error storing video call event:', error);
@@ -433,13 +560,20 @@ app.post('/api/call-sessions/end', async (req, res) => {
       });
     }
     
-    await endCallSession(sessionData);
+    const result = await endCallSession(sessionData);
     
-    res.json({
-      success: true,
-      message: 'Call session ended successfully',
-      timestamp: new Date().toISOString()
-    });
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Call session ended successfully',
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: result.message
+      });
+    }
     
   } catch (error) {
     console.error('❌ Error ending call session:', error);

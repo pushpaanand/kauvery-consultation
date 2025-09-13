@@ -62,7 +62,7 @@ function App() {
           text: encodedText  // Make sure it's 'text', not 'encryptedText'
         }),
       });
-  
+      
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ App.js: Server error response:', errorText);

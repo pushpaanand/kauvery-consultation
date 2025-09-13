@@ -5,7 +5,7 @@ import AppointmentService from '../utils/appointmentService';
 import ZegoUIKitPrebuilt from '@zegocloud/zego-uikit-prebuilt';
 
 // Helper function to get Zego credentials from environment variables
-const getZegoCredentials = () => {  
+const getZegoCredentials = () => {
   return {
     appId: process.env.REACT_APP_ZEGO_APP_ID,
     serverSecret: process.env.REACT_APP_ZEGO_SERVER_SECRET
@@ -370,6 +370,7 @@ const VideoConsultation = () => {
   const [sessionId, setSessionId] = useState(null);
   const [connectionStartTime, setConnectionStartTime] = useState(null);
   const [appointmentStored, setAppointmentStored] = useState(false);
+  const [connectEventSent, setConnectEventSent] = useState(false);
 
   // Monitor health packages state changes
   React.useEffect(() => {
@@ -894,7 +895,7 @@ const VideoConsultation = () => {
         
         // Store globally so it's accessible everywhere
         globalParsedParams = parsedParams;
-        
+
         // Generate room ID based on decrypted appointment ID
         const roomId = `ROOM_${parsedParams.app_no}`;
 
@@ -908,11 +909,11 @@ const VideoConsultation = () => {
           doctorName: parsedParams.doctorname,
           status: 'Scheduled'
         };
-
+        
         setAppointmentData(appointmentDataToSet);
       }
-    } catch (error) {
-      console.error('❌ Error parsing decrypted params from App.js storage:', error);
+      } catch (error) {
+        console.error('❌ Error parsing decrypted params from App.js storage:', error);
       setAccessDenied(true);
       setAccessDeniedReason('Failed to load appointment data');
     }
@@ -1056,7 +1057,7 @@ const VideoConsultation = () => {
   // Customize pre-join view with participant info and button text
   const customizePreJoinView = () => {
     try {
-
+      
       // Find and update join button text with slight curve corners
       const buttons = document.querySelectorAll('button');
       buttons.forEach(button => {
@@ -1142,7 +1143,7 @@ const VideoConsultation = () => {
       if (!prejoinContainer) {
         prejoinContainer = document.body;
       }
-           
+      
       if (prejoinContainer) {
         // Remove existing participant info if any
         const existingInfo = prejoinContainer.querySelector('.kauvery-participant-info');
@@ -1188,7 +1189,7 @@ const VideoConsultation = () => {
         const department = globalParsedParams? globalParsedParams.speciality : '';
         const patientName = globalParsedParams? globalParsedParams.username : '';
         
-        participantInfo.innerHTML = `
+                participantInfo.innerHTML = `
           <div style="
             display: flex;
             flex-direction: column;
@@ -1360,9 +1361,9 @@ const VideoConsultation = () => {
         // Insert the participant info
         prejoinContainer.appendChild(participantInfo);
         
-        // Start monitoring room status
-        updateRoomStatus();
-        
+              // Start monitoring room status
+      updateRoomStatus();
+      
         // Set up a mutation observer to reapply styling when Zego updates the DOM
         const observer = new MutationObserver(() => {
           setTimeout(() => {
@@ -1381,9 +1382,9 @@ const VideoConsultation = () => {
       }
       
       // ... rest of the existing code ...
-    } catch (error) {
-      console.warn('⚠️ Error customizing pre-join view:', error);
-    }
+      } catch (error) {
+        console.warn('⚠️ Error customizing pre-join view:', error);
+      }
   };
   
   // Force remove all borders from pre-join view
@@ -1441,12 +1442,12 @@ const VideoConsultation = () => {
       let participantNames = [];
       
       // Try to extract names from DOM for display purposes only
-      zegoUserNames.forEach(nameElement => {
-        const name = nameElement.textContent?.trim();
-        if (name && name !== 'You' && name !== 'Me' && !participantNames.includes(name)) {
-          participantNames.push(name);
-        }
-      });
+        zegoUserNames.forEach(nameElement => {
+          const name = nameElement.textContent?.trim();
+          if (name && name !== 'You' && name !== 'Me' && !participantNames.includes(name)) {
+            participantNames.push(name);
+          }
+        });
       
       // Update status display
       if (currentParticipantCount === 0) {
@@ -2303,7 +2304,7 @@ const VideoConsultation = () => {
 
                 // Check if any input fields were added and hide them
                 const inputFields = node.querySelectorAll ? node.querySelectorAll('input[type="text"], input[placeholder*="name"], input[placeholder*="Name"], [class*="input"], [class*="textbox"]') : [];
-                inputFields.forEach(input => {                  
+                inputFields.forEach(input => {
                   input.style.display = 'none';
                   
                   // Also hide the parent container if it's just for the input
@@ -2320,7 +2321,7 @@ const VideoConsultation = () => {
                     label.textContent.toLowerCase().includes('name') ||
                     label.textContent.toLowerCase().includes('username') ||
                     label.textContent.toLowerCase().includes('enter')
-                  )) {                    
+                  )) {
                     label.style.display = 'none';
                   }
                 });
@@ -2328,7 +2329,7 @@ const VideoConsultation = () => {
                 // Check if any titles were added and change their color
                 const titles = node.querySelectorAll ? node.querySelectorAll('h1, h2, h3, [class*="title"], [class*="header"], [class*="welcome"]') : [];
                 titles.forEach(title => {
-                  if (title.textContent && title.textContent.toLowerCase().includes('welcome')) {                    
+                  if (title.textContent && title.textContent.toLowerCase().includes('welcome')) {
                     title.style.color = '#962067';
                     title.style.fontFamily = "'Poppins', sans-serif";
                     title.style.fontWeight = '600';
@@ -2339,7 +2340,7 @@ const VideoConsultation = () => {
                 // More aggressive title color application
                 const welcomeElements = node.querySelectorAll ? node.querySelectorAll('*') : [];
                 welcomeElements.forEach(element => {
-                  if (element.textContent && element.textContent.toLowerCase().includes('welcome')) {             
+                  if (element.textContent && element.textContent.toLowerCase().includes('welcome')) {
                     element.style.color = '#962067';
                     element.style.fontFamily = "'Poppins', sans-serif";
                     element.style.fontWeight = '600';
@@ -2363,7 +2364,7 @@ const VideoConsultation = () => {
 
                 // Check for Zego quit/end call elements and hide them
                 const quitElements = node.querySelectorAll ? node.querySelectorAll('[class*="quit"], [class*="Quit"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"]') : [];
-                quitElements.forEach(element => {                 
+                quitElements.forEach(element => {
                   element.style.display = 'none';
                   element.style.visibility = 'hidden';
                   element.style.opacity = '0';
@@ -2380,7 +2381,7 @@ const VideoConsultation = () => {
                     button.textContent.toLowerCase().includes('hang up') ||
                     button.textContent.toLowerCase().includes('end') ||
                     button.textContent.toLowerCase().includes('exit')
-                  )) {                    
+                  )) {
                     button.onclick = (e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -2404,7 +2405,7 @@ const VideoConsultation = () => {
                   node.className.toLowerCase().includes('modal') ||
                   node.className.toLowerCase().includes('dialog') ||
                   node.className.toLowerCase().includes('overlay')
-                )) {                  
+                )) {
                   node.style.display = 'none';
                   node.style.visibility = 'hidden';
                   node.style.opacity = '0';
@@ -2417,14 +2418,14 @@ const VideoConsultation = () => {
                   node.textContent.toLowerCase().includes('call ended') ||
                   node.textContent.toLowerCase().includes('consultation ended') ||
                   node.textContent.toLowerCase().includes('return to home')
-                )) {                  
+                )) {
                   node.style.display = 'none';
                   node.style.visibility = 'hidden';
                   node.style.opacity = '0';
                   node.style.pointerEvents = 'none';
                   
                   // Trigger our custom call ended page
-                  if (!callEnded) {                    
+                  if (!callEnded) {
                     setCallEnded(true);
                   }
                 }
@@ -2445,7 +2446,7 @@ const VideoConsultation = () => {
         const titleElements = document.querySelectorAll('*');
         titleElements.forEach(element => {
           if (element.textContent && element.textContent.toLowerCase().includes('welcome') && 
-              element.closest('.zego-prejoin-view')) {            
+              element.closest('.zego-prejoin-view')) {
             element.style.color = '#962067';
             element.style.fontFamily = "'Poppins', sans-serif";
             element.style.fontWeight = '600';
@@ -2489,7 +2490,7 @@ const VideoConsultation = () => {
             element.textContent.toLowerCase().includes('call ended') ||
             element.textContent.toLowerCase().includes('consultation ended') ||
             element.textContent.toLowerCase().includes('return to home')
-          )) {            
+          )) {
             element.style.display = 'none';
             element.style.visibility = 'hidden';
             element.style.opacity = '0';
@@ -2544,7 +2545,7 @@ const VideoConsultation = () => {
         setTimeout(initializeZego, 500);
         return;
       }
-      
+
       setInitializationError(null);
 
       // Check Zego credentials first
@@ -2558,7 +2559,7 @@ const VideoConsultation = () => {
       const numericAppID = parseInt(appID, 10);
       if (isNaN(numericAppID)) {
         throw new Error(`Invalid appID: ${appID}. Must be a valid number.`);
-      }      
+      }
       // Try different import approaches
       let ZegoUIKitPrebuilt;
       try {
@@ -2571,7 +2572,7 @@ const VideoConsultation = () => {
       
       if (!ZegoUIKitPrebuilt) {
         throw new Error('ZegoUIKitPrebuilt is undefined after import');
-      }      
+      }
       
       // Try different token generation methods
       let kitToken;
@@ -2638,46 +2639,66 @@ const VideoConsultation = () => {
             }
           },
           onJoinRoom: () => {
-                        
-            // Track connection event
-            handleConnectionEvent('connected', { 
-              room_id: appointmentData.roomId,
-              join_time: new Date().toISOString()
-            });
-            
-            // Track video call join event (existing code)
-            const appointmentId = AppointmentService.getAppointmentId();
-            if (appointmentId && appointmentData) {
-              // Start call session
-              // AppointmentService.startCallSession({
-              //   appointment_id: parseInt(appointmentId),
-              //   room_id: appointmentData.roomId,
-              //   user_id: appointmentData.userid,
-              //   username: appointmentData.username
-              // }).catch(err => console.error('Failed to start call session:', err));
+            // Store appointment data FIRST before any video call events
+            if (appointmentData && !appointmentStored) {
+              const appointmentToStore = {
+                app_no: appointmentData.app_no || globalParsedParams.app_no,
+                username: appointmentData.username || globalParsedParams.username,
+                userid: appointmentData.userid || globalParsedParams.userid,
+                doctorname: appointmentData.doctorname || globalParsedParams.doctorname,
+                speciality: appointmentData.speciality || globalParsedParams.speciality,
+                appointment_date: appointmentData.appointment_date || globalParsedParams.appointment_date,
+                appointment_time: appointmentData.appointment_time || globalParsedParams.appointment_time,
+                room_id: appointmentData.roomId
+              };
               
-              // Store video call event
-              AppointmentService.storeVideoCallEvent({
-                appointment_id: parseInt(appointmentId),
-                event_type: 'join_room',
-                room_id: appointmentData.roomId,
-                user_id: appointmentData.userid,
-                username: appointmentData.username,
-                event_data: {
-                  timestamp: new Date().toISOString(),
+              // Store appointment first, then handle video call events
+              AppointmentService.storeAppointment(appointmentToStore)
+                .then(result => {
+                  setAppointmentStored(true);
+                  
+                  // Store appointment ID for future use
+                  if (result.appointment_id) {
+                    AppointmentService.setAppointmentId(result.appointment_id);
+                  }
+                  
+                  // NOW track connection event after appointment is stored
+                  if (!connectEventSent) {
+                    handleConnectionEvent('connected', { 
+                      room_id: appointmentData.roomId,
+                      join_time: new Date().toISOString()
+                    });
+                    setConnectEventSent(true);
+                  }
+                  
+                  // Start call session after appointment is stored
+                  AppointmentService.startCallSession({
+                    appointment_id: parseInt(result.appointment_id),
+                    room_id: appointmentData.roomId,
+                    user_id: appointmentData.userid,
+                    username: appointmentData.username
+                  }).catch(err => console.error('Failed to start call session:', err));
+                })
+                .catch(err => {
+                  console.error('❌ Failed to store appointment when patient joined:', err);
+                });
+            } else if (appointmentStored) {
+              // If appointment is already stored, just track the connection event
+              if (!connectEventSent) {
+                handleConnectionEvent('connected', { 
                   room_id: appointmentData.roomId,
-                  user_id: appointmentData.userid,
-                  username: appointmentData.username
-                }
-              }).catch(err => console.error('Failed to store video call event:', err));
+                  join_time: new Date().toISOString()
+                });
+                setConnectEventSent(true);
+              }
             }
             
             // Use longer timeout to ensure pre-join to video transition is complete
             setTimeout(() => {
-              setZegoInitialized(true);              
+              setZegoInitialized(true);
             }, 500);
           },
-          onLeaveRoom: () => {            
+          onLeaveRoom: () => {
             // Track connection event
             handleConnectionEvent('disconnected', { 
               room_id: appointmentData.roomId,
@@ -2716,7 +2737,7 @@ const VideoConsultation = () => {
             console.error('❌ Zego join room error:', error);
             setInitializationError(error);
           },
-                  onPreJoinViewReady: () => {          
+                  onPreJoinViewReady: () => {
           // Customize the join button text and add participant info
           setTimeout(() => {
             customizePreJoinView();
@@ -2737,8 +2758,8 @@ const VideoConsultation = () => {
               app_no: appointmentData.app_no,
               username: appointmentData.username,
               userid: appointmentData.userid,
-              doctorname: appointmentData.doctorname || 'Dr. Smith', // Default if not provided
-              speciality: appointmentData.speciality || 'General Medicine', // Default if not provided
+              doctorname: appointmentData.doctorname, // Default if not provided
+              speciality: appointmentData.speciality, // Default if not provided
               appointment_date: appointmentData.appointment_date || new Date().toISOString().split('T')[0],
               appointment_time: appointmentData.appointment_time || new Date().toTimeString().split(' ')[0]
             };
@@ -2750,7 +2771,7 @@ const VideoConsultation = () => {
                 // Store appointment ID for future use
                 if (result.appointment_id) {
                   AppointmentService.setAppointmentId(result.appointment_id);
-                }
+        }
               })
               .catch(err => {
                 console.error('❌ Failed to store appointment when both participants joined:', err);
@@ -2790,7 +2811,7 @@ const VideoConsultation = () => {
       setInitializationError(joinError.message || 'Failed to join room');
       throw joinError;
     }
-
+    
     // Fallback: Set initialized state if onJoinRoom doesn't trigger
     setTimeout(() => {
       if (!zegoInitialized && zegoInstanceRef.current) {
@@ -3499,7 +3520,7 @@ const VideoConsultation = () => {
 
   // Show access denied page if validation failed or decryption error
   
-  if (accessDenied || decodingError) {    
+  if (accessDenied || decodingError) {
     return <AccessDeniedPage />;
   }
 
@@ -3781,7 +3802,7 @@ const VideoConsultation = () => {
       {/* Connection Status Indicator */}
       <ConnectionStatusIndicator />
 
-      {/* Zego Video Container with Error Boundary */}
+            {/* Zego Video Container with Error Boundary */}
       <VideoErrorBoundary>
         <ZegoVideoInterface 
           containerRef={zegoContainerRef}
@@ -3790,8 +3811,8 @@ const VideoConsultation = () => {
           appointmentData={appointmentData}
           onRetry={() => {
             setInitializationError(null);
-          setZegoInitialized(false);
-          zegoInstanceRef.current = null;
+            setZegoInitialized(false);
+            zegoInstanceRef.current = null;
             initializeZego().catch(console.error);
           }}
           showLeaveRoomPopup={showLeaveRoomPopup}
