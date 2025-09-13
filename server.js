@@ -4,20 +4,17 @@ const path = require('path');
 const crypto = require('crypto');
 const sql = require('mssql');
 const { DefaultAzureCredential, ClientSecretCredential } = require('@azure/identity');
-
-// Load environment variables FIRST
-require('dotenv').config();
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+
 // Database configuration for Azure SQL Database
 const dbConfig = {
-  server: process.env.DB_SERVER,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+  server: process.env.DB_SERVER || 'videoconsultation.database.windows.net',
+  database: process.env.DB_NAME || 'videoconsultation_db',
+  user: process.env.DB_USER || 'videoconsultation', // Updated username
+  password: process.env.DB_PASSWORD || 'kauvery@123', // Updated password
   port: parseInt(process.env.DB_PORT) || 1433,
   options: {
     encrypt: true,
