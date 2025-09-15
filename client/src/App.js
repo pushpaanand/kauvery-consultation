@@ -80,13 +80,12 @@ function App() {
   // Function to store appointment data in database
   const storeAppointmentData = async (appointmentData) => {
     try {
-      // Prepare appointment data for storage - only the 3 required parameters + defaults
+      // Prepare appointment data for storage
       const appointmentToStore = {
         app_no: appointmentData.app_no,
         username: appointmentData.username,
         userid: appointmentData.userid,
-        // Set default values for other fields (hidden for now)
-        room_id: `ROOM_${appointmentData.app_no}`,
+        room_id: appointmentData.app_no, // Temporary room ID (appointment number)
         doctorname: appointmentData.doctorname,
         speciality: appointmentData.speciality,
         appointment_date: appointmentData.appointment_date,
@@ -101,10 +100,11 @@ function App() {
         // Store appointment ID in session storage
         AppointmentService.setAppointmentId(result.appointment_id);
         
-        // Update appointment state with stored data
+        // Update appointment state with stored data and correct room ID
         setAppointment({
           ...appointmentToStore,
-          id: result.appointment_id
+          id: result.appointment_id,
+          roomId: result.appointment_id.toString() // Use just appointment ID as room ID
         });
       } else {
         console.error('❌ App.js: Failed to store appointment:', result.error);

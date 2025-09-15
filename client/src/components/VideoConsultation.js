@@ -895,25 +895,26 @@ const VideoConsultation = () => {
         
         // Store globally so it's accessible everywhere
         globalParsedParams = parsedParams;
-
-        // Generate room ID based on decrypted appointment ID
-        const roomId = `ROOM_${parsedParams.app_no}`;
-
+        
+        // Generate room ID based on appointment ID (just the ID number)
+        const appointmentId = AppointmentService.getAppointmentId();
+        const roomId = appointmentId ? appointmentId.toString() : parsedParams.app_no;
+        
         // Set appointment data with decrypted values from App.js
         const appointmentDataToSet = {
           id: parsedParams.app_no,
           department: parsedParams.speciality,
           username: parsedParams.username,
           userid: parsedParams.userid,
-          roomId: roomId,
+          roomId: roomId, // Use just appointment ID as room ID
           doctorName: parsedParams.doctorname,
           status: 'Scheduled'
         };
-        
+
         setAppointmentData(appointmentDataToSet);
       }
-      } catch (error) {
-        console.error('❌ Error parsing decrypted params from App.js storage:', error);
+    } catch (error) {
+      console.error('❌ Error parsing decrypted params from App.js storage:', error);
       setAccessDenied(true);
       setAccessDeniedReason('Failed to load appointment data');
     }
@@ -2649,7 +2650,7 @@ const VideoConsultation = () => {
                 speciality: appointmentData.speciality || globalParsedParams.speciality,
                 appointment_date: appointmentData.appointment_date || globalParsedParams.appointment_date,
                 appointment_time: appointmentData.appointment_time || globalParsedParams.appointment_time,
-                room_id: appointmentData.roomId
+                room_id: appointmentData.app_no // Temporary room ID (appointment number)
               };
               
               // Store appointment first, then handle video call events
@@ -2660,12 +2661,19 @@ const VideoConsultation = () => {
                   // Store appointment ID for future use
                   if (result.appointment_id) {
                     AppointmentService.setAppointmentId(result.appointment_id);
+                    
+                    // Update room ID to use just appointment ID
+                    const newRoomId = result.appointment_id.toString();
+                    setAppointmentData(prev => ({
+                      ...prev,
+                      roomId: newRoomId
+                    }));
                   }
                   
                   // NOW track connection event after appointment is stored
                   if (!connectEventSent) {
                     handleConnectionEvent('connected', { 
-                      room_id: appointmentData.roomId,
+                      room_id: result.appointment_id.toString(),
                       join_time: new Date().toISOString()
                     });
                     setConnectEventSent(true);
@@ -2674,7 +2682,7 @@ const VideoConsultation = () => {
                   // Start call session after appointment is stored
                   AppointmentService.startCallSession({
                     appointment_id: parseInt(result.appointment_id),
-                    room_id: appointmentData.roomId,
+                    room_id: result.appointment_id.toString(),
                     user_id: appointmentData.userid,
                     username: appointmentData.username
                   }).catch(err => console.error('Failed to start call session:', err));
