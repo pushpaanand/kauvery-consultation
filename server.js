@@ -178,7 +178,7 @@ const formatTimeForSQL = (timeString) => {
 // Enhanced appointment storage with MIS tracking
 async function storeAppointment(appointmentData) {
   try {
-    console.log('📝 Server: Storing appointment data:', appointmentData);
+    // console.log('📝 Server: Storing appointment data:', appointmentData);
     
     const pool = await sql.connect(dbConfig);
     const request = pool.request();
@@ -249,7 +249,7 @@ async function storeAppointment(appointmentData) {
 // Enhanced video call event storage with comprehensive tracking
 async function storeVideoCallEvent(eventData) {
   try {
-    console.log('📹 Server: Storing video call event:', eventData);
+   // console.log('📹 Server: Storing video call event:', eventData);
     
     const pool = await sql.connect(dbConfig);
     const request = pool.request();
@@ -298,7 +298,7 @@ async function storeVideoCallEvent(eventData) {
     //   `);
     // }
     
-    console.log('✅ Server: Video call event stored successfully');
+    // console.log('✅ Server: Video call event stored successfully');
     return { success: true, appointment_id: appointmentId };
     
   } catch (err) {
@@ -307,10 +307,28 @@ async function storeVideoCallEvent(eventData) {
   }
 }
 
-// Start call session
+// Fix the startCallSession function
 async function startCallSession(sessionData) {
   try {
+    // console.log('🎬 Server: Starting call session:', sessionData);
+    
+    const pool = await sql.connect(dbConfig);
     const request = pool.request();
+    
+    // Get appointment ID if it's a string (appointment number)
+    let appointmentId = sessionData.appointment_id;
+    if (isNaN(sessionData.appointment_id)) {
+      const appointmentResult = await request.query(`
+        SELECT id FROM appointments 
+        WHERE app_no = '${sessionData.appointment_id}'
+      `);
+      
+      if (appointmentResult.recordset.length > 0) {
+        appointmentId = appointmentResult.recordset[0].id;
+      } else {
+        throw new Error(`Appointment not found: ${sessionData.appointment_id}`);
+      }
+    }
     
     // End any existing active sessions for this appointment
     await request.query(`
@@ -318,14 +336,17 @@ async function startCallSession(sessionData) {
       SET session_end = GETDATE(), 
           duration_seconds = DATEDIFF(SECOND, session_start, GETDATE()),
           status = 'ended'
-      WHERE appointment_id = ${sessionData.appointment_id} AND status = 'active'
+      WHERE appointment_id = ${appointmentId} AND status = 'active'
     `);
     
     // Start new session
     await request.query(`
-      INSERT INTO call_sessions (appointment_id, session_start, room_id, user_id, username)
-      VALUES (${sessionData.appointment_id}, GETDATE(), '${sessionData.room_id}', '${sessionData.user_id}', '${sessionData.username}')
+      INSERT INTO call_sessions (appointment_id, session_start, room_id, user_id, username, status)
+      VALUES (${appointmentId}, GETDATE(), '${sessionData.room_id}', '${sessionData.user_id}', '${sessionData.username}', 'active')
     `);
+    
+    // console.log('✅ Server: Call session started successfully');
+    return { success: true, appointment_id: appointmentId };
     
   } catch (err) {
     console.error('❌ Error starting call session:', err);
@@ -336,7 +357,7 @@ async function startCallSession(sessionData) {
 // Fix the endCallSession function
 async function endCallSession(sessionData) {
   try {
-    console.log('🏁 Server: Ending call session:', sessionData);
+    // console.log('🏁 Server: Ending call session:', sessionData);
     
     const pool = await sql.connect(dbConfig);
     const request = pool.request();
@@ -364,7 +385,7 @@ async function endCallSession(sessionData) {
       WHERE appointment_id = ${appointmentId} AND status = 'active'
     `);
     
-    console.log('✅ Server: Call session ended successfully');
+    // console.log('✅ Server: Call session ended successfully');
     return { success: true, appointment_id: appointmentId };
     
   } catch (err) {
@@ -436,26 +457,26 @@ app.post('/api/decrypt', (req, res) => {
 // Add debugging to the /api/appointments endpoint
 app.post('/api/appointments', async (req, res) => {
   try {
-    console.log(' Server: /api/appointments endpoint called');
-    console.log('📞 Server: Request body:', req.body);
+    // console.log(' Server: /api/appointments endpoint called');
+    // console.log('📞 Server: Request body:', req.body);
     
     const appointmentData = req.body;
     
     // Validate required fields
     if (!appointmentData.app_no || !appointmentData.username || !appointmentData.userid) {
-      console.log('❌ Server: Missing required fields');
+      // console.log('❌ Server: Missing required fields');
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: app_no, username, userid'
       });
     }
     
-    console.log('✅ Server: Required fields validated, calling storeAppointment');
+    // console.log('✅ Server: Required fields validated, calling storeAppointment');
     
     // Store appointment in database
     const result = await storeAppointment(appointmentData);
     
-    console.log('📊 Server: storeAppointment result:', result);
+    // console.log('📊 Server: storeAppointment result:', result);
     
     if (result.success) {
       res.json({

@@ -1,6 +1,6 @@
 // Appointment Service for handling appointment storage and video call events
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || '';
-// const SERVER_URL = 'http://localhost:3001';
+// const SERVER_URL = process.env.REACT_APP_SERVER_URL || '';
+const SERVER_URL = 'http://localhost:3001';
 class AppointmentService {
   // Store appointment data when user enters the website
   static async storeAppointment(appointmentData) {

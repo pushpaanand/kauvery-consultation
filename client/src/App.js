@@ -49,8 +49,8 @@ function App() {
   // Function to decrypt encoded ID parameter by calling Express server
   const decryptParameter = async (encodedText) => {
     try {
-      // const serverUrl = 'http://localhost:3001';
-      const serverUrl = 'https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net';
+      const serverUrl = 'http://localhost:3001';
+      // const serverUrl = 'https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net';
       const apiEndpoint = `${serverUrl}/api/decrypt`;
       
       const response = await fetch(apiEndpoint, {
