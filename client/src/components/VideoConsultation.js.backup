@@ -378,9 +378,7 @@ const VideoConsultation = () => {
 
     }
   }, [showHealthPackages]);
-  useEffect(() => {
-    updateStatusDisplay();
-  }, [participantCount]);
+
   // Enhanced Zego override with confirm button focus
   React.useEffect(() => {
     const style = document.createElement('style');
@@ -894,12 +892,13 @@ const VideoConsultation = () => {
       
       if (decryptedParams) {
         const parsedParams = JSON.parse(decryptedParams);
+        
         // Store globally so it's accessible everywhere
         globalParsedParams = parsedParams;
         
         // Generate room ID based on appointment ID (just the ID number)
         const appointmentId = AppointmentService.getAppointmentId();
-        const roomId = parsedParams.app_no;
+        const roomId = appointmentId ? appointmentId.toString() : parsedParams.app_no;
 
         // Set appointment data with decrypted values from App.js
         const appointmentDataToSet = {
@@ -907,7 +906,7 @@ const VideoConsultation = () => {
           department: parsedParams.speciality,
           username: parsedParams.username,
           userid: parsedParams.userid,
-          roomID: roomId, // Use just appointment ID as room ID
+          roomId: roomId, // Use just appointment ID as room ID
           doctorName: parsedParams.doctorname,
           status: 'Scheduled'
         };
@@ -936,7 +935,7 @@ const VideoConsultation = () => {
 
   // Separate useEffect to initialize Zego when appointment data is available
   useEffect(() => {
-    if (appointmentData && appointmentData.roomID && !zegoInitialized && !zegoInstanceRef.current) {
+    if (appointmentData && appointmentData.roomId && !zegoInitialized && !zegoInstanceRef.current) {
       
       // Temporarily delay Zego initialization to ensure DOM is stable
       setTimeout(() => {
@@ -979,12 +978,12 @@ const VideoConsultation = () => {
       AppointmentService.storeVideoCallEvent({
         appointment_id: parseInt(appointmentId),
         event_type: 'end_call_requested',
-        roomID: appointmentData.roomID,
+        room_id: appointmentData.roomId,
         user_id: appointmentData.userid,
         username: appointmentData.username,
         event_data: {
           timestamp: new Date().toISOString(),
-          roomID: appointmentData.roomID,
+          room_id: appointmentData.roomId,
           user_id: appointmentData.userid,
           username: appointmentData.username,
           action: 'user_requested_end_call'
@@ -1010,12 +1009,12 @@ const VideoConsultation = () => {
       AppointmentService.storeVideoCallEvent({
         appointment_id: parseInt(appointmentId),
         event_type: 'manual_leave_room',
-        roomID: appointmentData.roomID,
+        room_id: appointmentData.roomId,
         user_id: appointmentData.userid,
         username: appointmentData.username,
         event_data: {
           timestamp: new Date().toISOString(),
-          roomID: appointmentData.roomID,
+          room_id: appointmentData.roomId,
           user_id: appointmentData.userid,
           username: appointmentData.username,
           action: 'user_confirmed_leave'
@@ -1586,7 +1585,7 @@ const VideoConsultation = () => {
             margin: 0;
             font-family: 'Poppins', sans-serif;
             font-weight: 500;
-                      ">Room: ${appointmentData?.roomID}</p>
+                      ">Room: ${appointmentData?.roomId || `ROOM_${appointmentData?.id || 'TEST123'}`}</p>
         </div>
         
         <div style="
@@ -2536,7 +2535,7 @@ const VideoConsultation = () => {
       }
 
       // Safety check for appointment data
-      if (!appointmentData || !appointmentData.roomID || !appointmentData.userid || !appointmentData.username) {
+      if (!appointmentData || !appointmentData.roomId || !appointmentData.userid || !appointmentData.username) {
        
         setTimeout(initializeZego, 500);
         return;
@@ -2582,7 +2581,7 @@ const VideoConsultation = () => {
         kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
           numericAppID, 
           serverSecret, 
-          appointmentData.roomID, 
+          appointmentData.roomId, 
           appointmentData.userid, 
           appointmentData.username || 'Patient' // Add fallback
         );
@@ -2590,7 +2589,7 @@ const VideoConsultation = () => {
         kitToken = ZegoUIKitPrebuilt.generateKitToken(
           numericAppID, 
           serverSecret, 
-          appointmentData.roomID, 
+          appointmentData.roomId, 
           appointmentData.userid, 
           appointmentData.username || 'Patient' // Add fallback
         );
@@ -2651,9 +2650,7 @@ const VideoConsultation = () => {
                 speciality: appointmentData.speciality || globalParsedParams.speciality,
                 appointment_date: appointmentData.appointment_date || globalParsedParams.appointment_date,
                 appointment_time: appointmentData.appointment_time || globalParsedParams.appointment_time,
-                // appointment_date: "15/09/2025 00:00:00",
-                // appointment_time: "15:30",
-                roomID: appointmentData.app_no // Temporary room ID (appointment number)
+                room_id: appointmentData.app_no // Temporary room ID (appointment number)
               };
               
               // Store appointment first, then handle video call events
@@ -2669,14 +2666,14 @@ const VideoConsultation = () => {
                     const newRoomId = result.appointment_id.toString();
                     setAppointmentData(prev => ({
                       ...prev,
-                      // roomId: newRoomId
+                      roomId: newRoomId
                     }));
                   }
                   
                   // NOW track connection event after appointment is stored
                   if (!connectEventSent) {
                     handleConnectionEvent('connected', { 
-                      roomID: result.appointment_id.toString(),
+                      room_id: result.appointment_id.toString(),
                       join_time: new Date().toISOString()
                     });
                     setConnectEventSent(true);
@@ -2685,7 +2682,7 @@ const VideoConsultation = () => {
                   // Start call session after appointment is stored
                   AppointmentService.startCallSession({
                     appointment_id: parseInt(result.appointment_id),
-                    roomID: result.appointment_id.toString(),
+                    room_id: result.appointment_id.toString(),
                     user_id: appointmentData.userid,
                     username: appointmentData.username
                   }).catch(err => console.error('Failed to start call session:', err));
@@ -2697,7 +2694,7 @@ const VideoConsultation = () => {
               // If appointment is already stored, just track the connection event
               if (!connectEventSent) {
                 handleConnectionEvent('connected', { 
-                  roomID: appointmentData.roomID,
+                  room_id: appointmentData.roomId,
                   join_time: new Date().toISOString()
                 });
                 setConnectEventSent(true);
@@ -2712,7 +2709,7 @@ const VideoConsultation = () => {
           onLeaveRoom: () => {
             // Track connection event
             handleConnectionEvent('disconnected', { 
-              roomID: appointmentData.roomID,
+              room_id: appointmentData.roomId,
               leave_time: new Date().toISOString()
             });
             
@@ -2728,12 +2725,12 @@ const VideoConsultation = () => {
               AppointmentService.storeVideoCallEvent({
                 appointment_id: parseInt(appointmentId),
                 event_type: 'leave_room',
-                roomID: appointmentData.roomID,
+                room_id: appointmentData.roomId,
                 user_id: appointmentData.userid,
                 username: appointmentData.username,
                 event_data: {
                   timestamp: new Date().toISOString(),
-                  roomID: appointmentData.roomID,
+                  room_id: appointmentData.roomId,
                   user_id: appointmentData.userid,
                   username: appointmentData.username
                 }
@@ -2758,55 +2755,41 @@ const VideoConsultation = () => {
           
         },
         // Additional event listeners for connection tracking
-        onUserUpdate: (updateType, userList) => {          
-          // Update participant count based on the actual user list
+        onUserUpdate: (userList) => {
           setParticipantCount(userList.length);
-          
-          // Update status display immediately
-          setTimeout(() => {
-            updateStatusDisplay();
-          }, 100);
-          
-          // Track the event
-          if (updateType === 'ADD') {
-            handleConnectionEvent('user_joined', { 
-              room_id: appointmentData.roomId,
-              user_count: userList.length,
-              users: userList.map(u => ({ id: u.userID, name: u.userName }))
-            });
-          } else if (updateType === 'DELETE') {
-            handleConnectionEvent('user_left', { 
-              room_id: appointmentData.roomId,
-              user_count: userList.length,
-              users: userList.map(u => ({ id: u.userID, name: u.userName }))
-            });
-          }
           
           // Check if both patient and doctor are in the room (2 or more participants)
           if (userList.length >= 2 && !appointmentStored && appointmentData) {
+            
             // Store appointment data when both participants are connected
             const appointmentToStore = {
               app_no: appointmentData.app_no,
               username: appointmentData.username,
               userid: appointmentData.userid,
-              roomID: appointmentData.roomID,
-              doctorname: appointmentData.doctorname,
-              speciality: appointmentData.speciality,
-              appointment_date: "15/09/2025 00:00:00",
-              appointment_time: "15:30"
+              doctorname: appointmentData.doctorname, // Default if not provided
+              speciality: appointmentData.speciality, // Default if not provided
+              appointment_date: appointmentData.appointment_date || new Date().toISOString().split('T')[0],
+              appointment_time: appointmentData.appointment_time || new Date().toTimeString().split(' ')[0]
             };
             
             AppointmentService.storeAppointment(appointmentToStore)
               .then(result => {
                 setAppointmentStored(true);
+                
+                // Store appointment ID for future use
                 if (result.appointment_id) {
                   AppointmentService.setAppointmentId(result.appointment_id);
-                }
+        }
               })
               .catch(err => {
                 console.error('❌ Failed to store appointment when both participants joined:', err);
               });
           }
+          
+          trackVideoCallEvent('user_update', { 
+            user_count: userList.length,
+            users: userList.map(u => ({ id: u.userID, name: u.userName }))
+          });
         },
         
         onRoomStateUpdate: (roomState) => {
@@ -3494,7 +3477,7 @@ const VideoConsultation = () => {
               <li><strong>Doctor:</strong> {appointmentData?.doctorName || ''}</li>
               <li><strong>Department:</strong> {appointmentData?.department || 'General Medicine'}</li>
               <li><strong>Patient:</strong> {appointmentData?.username || 'Patient'}</li>
-              <li><strong>Room:</strong> {appointmentData?.roomID}</li>
+              <li><strong>Room:</strong> {appointmentData?.roomId || `ROOM_${appointmentData?.id || 'TEST123'}`}</li>
             </ul>
           </div>
           
@@ -3663,7 +3646,7 @@ const VideoConsultation = () => {
         event_type: eventType,
         event_timestamp: new Date().toISOString(),
         event_data: JSON.stringify(eventData),
-        roomID: appointmentData?.roomID,
+        room_id: appointmentData?.roomId,
         user_id: appointmentData?.userid,
         username: appointmentData?.username
       };
@@ -3680,7 +3663,7 @@ const VideoConsultation = () => {
       const sessionData = {
         appointment_id: appointmentData?.id,
         session_start: new Date().toISOString(),
-        roomID: appointmentData?.roomID,
+        room_id: appointmentData?.roomId,
         user_id: appointmentData?.userid,
         username: appointmentData?.username,
         status: 'active'
@@ -3703,7 +3686,7 @@ const VideoConsultation = () => {
       const sessionData = {
         appointment_id: appointmentData?.id,
         session_end: new Date().toISOString(),
-        roomID: appointmentData?.roomID,
+        room_id: appointmentData?.roomId,
         user_id: appointmentData?.userid,
         username: appointmentData?.username,
         status: 'ended',
@@ -3795,35 +3778,6 @@ const VideoConsultation = () => {
         break;
     }
   };
-  
-  // Update the status display logic to use real-time participant count
-  const updateStatusDisplay = () => {
-    // Use the correct selectors that match your actual DOM elements
-    const statusText = document.getElementById('status-text');
-    const participantsList = document.getElementById('participants-list');
-    
-    if (!statusText || !participantsList) {
-      // console.log('❌ Status elements not found:', { statusText, participantsList });
-      return;
-    }
-    
-    // Use the current participant count from state
-    const currentCount = participantCount;
-    
-    if (currentCount === 0) {
-      statusText.textContent = ' No one else in the room';
-      participantsList.style.display = 'none';
-    } else if (currentCount === 1) {
-      statusText.textContent = '🟢 1 participant in the room';
-      participantsList.style.display = 'flex';
-    } else {
-      statusText.textContent = `🟢 ${currentCount} participants in the room`;
-      participantsList.style.display = 'flex';
-    }
-  };
-
-  // Call this function whenever participant count changes
- 
 
   return (
     <div style={styles.body}>

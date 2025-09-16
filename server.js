@@ -186,6 +186,8 @@ async function storeAppointment(appointmentData) {
     // Format dates for SQL Server
     const formattedDate = formatDateForSQL(appointmentData.appointment_date);
     const formattedTime = formatTimeForSQL(appointmentData.appointment_time);
+    // const formattedDate = "2025-09-15";
+    // const formattedTime = "15:30:00";
     
     // Check if appointment already exists
     const checkResult = await request.query(`
@@ -204,7 +206,7 @@ async function storeAppointment(appointmentData) {
             speciality = '${appointmentData.speciality}',
             appointment_date = '${formattedDate}',
             appointment_time = '${formattedTime}',
-            room_id = '${appointmentData.room_id}',
+            room_id = '${appointmentData.roomID}',
             updated_at = GETDATE()
         WHERE app_no = '${appointmentData.app_no}' 
         AND userid = '${appointmentData.userid}'
@@ -224,7 +226,7 @@ async function storeAppointment(appointmentData) {
         ('${appointmentData.app_no}', '${appointmentData.username}', '${appointmentData.userid}', 
          '${appointmentData.doctorname}', '${appointmentData.speciality}', 
          '${formattedDate}', '${formattedTime}', 
-         '${appointmentData.room_id}', GETDATE())
+         '${appointmentData.roomID}', GETDATE())
       `);
       
       // Get the newly created appointment ID
@@ -277,7 +279,7 @@ async function storeVideoCallEvent(eventData) {
       (${appointmentId}, '${eventData.event_type}', 
        '${eventData.event_timestamp || new Date().toISOString()}', 
        '${JSON.stringify(eventData.event_data)}', 
-       '${eventData.room_id}', '${eventData.user_id}', '${eventData.username}',
+       '${eventData.roomID}', '${eventData.user_id}', '${eventData.username}',
        '${eventData.session_id || ''}', 
        ${eventData.duration_seconds || 0}, 
        GETDATE())
@@ -297,8 +299,7 @@ async function storeVideoCallEvent(eventData) {
     //     WHERE id = ${appointmentId}
     //   `);
     // }
-    
-    // console.log('✅ Server: Video call event stored successfully');
+
     return { success: true, appointment_id: appointmentId };
     
   } catch (err) {
@@ -310,7 +311,6 @@ async function storeVideoCallEvent(eventData) {
 // Fix the startCallSession function
 async function startCallSession(sessionData) {
   try {
-    // console.log('🎬 Server: Starting call session:', sessionData);
     
     const pool = await sql.connect(dbConfig);
     const request = pool.request();
@@ -342,10 +342,9 @@ async function startCallSession(sessionData) {
     // Start new session
     await request.query(`
       INSERT INTO call_sessions (appointment_id, session_start, room_id, user_id, username, status)
-      VALUES (${appointmentId}, GETDATE(), '${sessionData.room_id}', '${sessionData.user_id}', '${sessionData.username}', 'active')
+      VALUES (${appointmentId}, GETDATE(), '${sessionData.roomID}', '${sessionData.user_id}', '${sessionData.username}', 'active')
     `);
-    
-    // console.log('✅ Server: Call session started successfully');
+
     return { success: true, appointment_id: appointmentId };
     
   } catch (err) {
@@ -505,7 +504,7 @@ app.post('/api/video-call-events', async (req, res) => {
     const eventData = req.body;
     
     // Validate required fields
-    if (!eventData.appointment_id || !eventData.event_type || !eventData.room_id || !eventData.user_id || !eventData.username) {
+    if (!eventData.appointment_id || !eventData.event_type || !eventData.roomID || !eventData.user_id || !eventData.username) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields for video call event'
@@ -542,7 +541,7 @@ app.post('/api/call-sessions/start', async (req, res) => {
   try {
     const sessionData = req.body;
     
-    if (!sessionData.appointment_id || !sessionData.room_id || !sessionData.user_id || !sessionData.username) {
+    if (!sessionData.appointment_id || !sessionData.roomID || !sessionData.user_id || !sessionData.username) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields for call session'

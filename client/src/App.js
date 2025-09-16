@@ -85,11 +85,13 @@ function App() {
         app_no: appointmentData.app_no,
         username: appointmentData.username,
         userid: appointmentData.userid,
-        room_id: appointmentData.app_no, // Temporary room ID (appointment number)
+        roomID: appointmentData.app_no, // Temporary room ID (appointment number)
         doctorname: appointmentData.doctorname,
         speciality: appointmentData.speciality,
         appointment_date: appointmentData.appointment_date,
         appointment_time: appointmentData.appointment_time
+        // appointment_date: "15/09/2025 00:00:00",
+        // appointment_time: "15:30"
       };
 
       // Store appointment in database
@@ -104,7 +106,7 @@ function App() {
         setAppointment({
           ...appointmentToStore,
           id: result.appointment_id,
-          roomId: result.appointment_id.toString() // Use just appointment ID as room ID
+          // roomId: result.appointment_id.toString() // Use just appointment ID as room ID
         });
       } else {
         console.error('❌ App.js: Failed to store appointment:', result.error);
@@ -189,32 +191,34 @@ function App() {
         speciality: decryptedData.speciality,
         appointment_date: decryptedData.appointment_date,
         appointment_time: decryptedData.appointment_time,
-        room_id: `ROOM_${decryptedData.app_no || decryptedData.userid}`
+        // appointment_date: "15/09/2025 00:00:00",
+        // appointment_time: "15:30",
+        roomID: decryptedData.app_no
       };
 
       // Validate appointment date (24 hours window)
-      const dateValidation = validateAppointmentDate(appointmentData.appointment_date, appointmentData.appointment_time);
+      // const dateValidation = validateAppointmentDate(appointmentData.appointment_date, appointmentData.appointment_time);
       
-      // Fix only the date formatting in the error message
-      if (!dateValidation.isValid) {
-        // Format date properly for display - handle DD/MM/YYYY format
-        let formattedDate;
-        try {
-          const dateOnly = appointmentData.appointment_date.split(' ')[0]; // Remove time
-          const [day, month, year] = dateOnly.split('/');
-          const dateObj = new Date(year, month - 1, day); // month is 0-indexed
-          formattedDate = dateObj.toLocaleDateString();
-        } catch (error) {
-          // Fallback to original date string if parsing fails
-          formattedDate = appointmentData.appointment_date.split(' ')[0];
-        }
+      // // Fix only the date formatting in the error message
+      // if (!dateValidation.isValid) {
+      //   // Format date properly for display - handle DD/MM/YYYY format
+      //   let formattedDate;
+      //   try {
+      //     const dateOnly = appointmentData.appointment_date.split(' ')[0]; // Remove time
+      //     const [day, month, year] = dateOnly.split('/');
+      //     const dateObj = new Date(year, month - 1, day); // month is 0-indexed
+      //     formattedDate = dateObj.toLocaleDateString();
+      //   } catch (error) {
+      //     // Fallback to original date string if parsing fails
+      //     formattedDate = appointmentData.appointment_date.split(' ')[0];
+      //   }
         
-        setDecryptionError(`Access denied. Video consultation is only available on your appointment date. Your appointment is scheduled for ${formattedDate}.`);
-        setIsDecrypting(false);
-        setIsTokenValid(false);
-        setDecryptionComplete(true);
-        return;
-      }
+      //   setDecryptionError(`Access denied. Video consultation is only available on your appointment date. Your appointment is scheduled for ${formattedDate}.`);
+      //   setIsDecrypting(false);
+      //   setIsTokenValid(false);
+      //   setDecryptionComplete(true);
+      //   return;
+      // }
 
       // Store appointment data in database
       await storeAppointmentData(appointmentData);
@@ -299,11 +303,13 @@ function App() {
           username: username,
           userid: userid,
           // Set default values for other fields (hidden for now)
-          room_id: `ROOM_${appointmentId}`,
+          roomID: appointmentId,
           doctorname: decryptedId.doctorname,
           speciality: decryptedId.speciality,
           appointment_date: decryptedId.appointment_date,
           appointment_time: decryptedId.appointment_time,
+          // appointment_date: "15/09/2025 00:00:00",
+          // appointment_time: "15:30",
         };
 
         // Validate appointment date (24 hours window)
@@ -350,11 +356,13 @@ function App() {
           username: directParams.username || directParams.name,
           userid: directParams.userid,
           // Set default values for other fields (hidden for now)
-          room_id: `ROOM_${directParams.app_no || directParams.userid}`,
+          roomID: directParams.app_no,
           doctorname: directParams.doctorname,
           speciality: directParams.speciality,
           appointment_date: directParams.date,
           appointment_time: directParams.time
+          // appointment_date: "15/09/2025 00:00:00",
+          // appointment_time: "15:30"
         };
 
         // Validate appointment date (24 hours window)

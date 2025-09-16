@@ -26,7 +26,8 @@ class AppointmentService {
       
       return result;
     } catch (error) {
-      console.error('❌ Error storing appointment:', error);
+      
+      error('❌ Error storing appointment:', error);
       throw error;
     }
   }
