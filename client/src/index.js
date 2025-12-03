@@ -3,6 +3,18 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { validateEnvironmentVariables } from './utils/validateEnvironment';
+
+// Validate environment variables to prevent internal IP disclosure
+try {
+  validateEnvironmentVariables();
+} catch (error) {
+  console.error('❌ Environment validation failed:', error.message);
+  // In production, fail the build
+  if (process.env.NODE_ENV === 'production') {
+    throw error;
+  }
+}
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

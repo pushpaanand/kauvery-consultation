@@ -1,11 +1,39 @@
 // Appointment Service for handling appointment storage and video call events
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || '';
-// const SERVER_URL = 'http://localhost:3001';
+// SECURITY: Use relative URLs or validated public URLs only
+// Never use internal IPs (172.x, 192.168.x, 10.x) - they get bundled into client code
+
+// Helper function to validate and sanitize server URL
+function getServerUrl() {
+  const envUrl = process.env.REACT_APP_SERVER_URL || '';
+  
+  // Check for internal IP addresses
+  const privateIPPatterns = [
+    /^https?:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\./,  // 172.16.0.0/12
+    /^https?:\/\/192\.168\./,                      // 192.168.0.0/16
+    /^https?:\/\/10\./,                            // 10.0.0.0/8
+    /^https?:\/\/127\./,                           // 127.0.0.0/8
+    /localhost/i,
+  ];
+  
+  // If environment URL contains private IP, use relative URL instead
+  if (envUrl && privateIPPatterns.some(pattern => pattern.test(envUrl))) {
+    console.warn('⚠️ SECURITY: Internal IP detected in REACT_APP_SERVER_URL. Using relative URL instead.');
+    return ''; // Empty string = relative URL
+  }
+  
+  // Use environment URL if valid, otherwise use relative URL
+  return envUrl || '';
+}
+
+const SERVER_URL = getServerUrl();
+
 class AppointmentService {
   // Store appointment data when user enters the website
   static async storeAppointment(appointmentData) {
     try {      
-      const response = await fetch(`${SERVER_URL}/api/appointments`, {
+      // Use relative URL if SERVER_URL is empty (prevents internal IP exposure)
+      const apiUrl = SERVER_URL ? `${SERVER_URL}/api/appointments` : '/api/appointments';
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -26,8 +54,7 @@ class AppointmentService {
       
       return result;
     } catch (error) {
-      
-      error('❌ Error storing appointment:', error);
+      console.error('❌ Error storing appointment:', error);
       throw error;
     }
   }
@@ -36,7 +63,9 @@ class AppointmentService {
   static async storeVideoCallEvent(eventData) {
     try {
       
-      const response = await fetch(`${SERVER_URL}/api/video-call-events`, {
+      // Use relative URL if SERVER_URL is empty (prevents internal IP exposure)
+      const apiUrl = SERVER_URL ? `${SERVER_URL}/api/video-call-events` : '/api/video-call-events';
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -60,7 +89,9 @@ class AppointmentService {
   // Start call session
   static async startCallSession(sessionData) {
     try {      
-      const response = await fetch(`${SERVER_URL}/api/call-sessions/start`, {
+      // Use relative URL if SERVER_URL is empty (prevents internal IP exposure)
+      const apiUrl = SERVER_URL ? `${SERVER_URL}/api/call-sessions/start` : '/api/call-sessions/start';
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,7 +115,9 @@ class AppointmentService {
   // End call session
   static async endCallSession(sessionData) {
     try {      
-      const response = await fetch(`${SERVER_URL}/api/call-sessions/end`, {
+      // Use relative URL if SERVER_URL is empty (prevents internal IP exposure)
+      const apiUrl = SERVER_URL ? `${SERVER_URL}/api/call-sessions/end` : '/api/call-sessions/end';
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -109,7 +142,9 @@ class AppointmentService {
   static async getAppointment(appNo) {
     try {
       
-      const response = await fetch(`${SERVER_URL}/api/appointments/${appNo}`);
+      // Use relative URL if SERVER_URL is empty (prevents internal IP exposure)
+      const apiUrl = SERVER_URL ? `${SERVER_URL}/api/appointments/${appNo}` : `/api/appointments/${appNo}`;
+      const response = await fetch(apiUrl);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

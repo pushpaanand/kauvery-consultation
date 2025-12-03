@@ -19,7 +19,6 @@ function App() {
     const required = [
       'REACT_APP_ZEGO_APP_ID',
       'REACT_APP_ZEGO_SERVER_SECRET',
-      'REACT_APP_DECRYPTION_API_URL',
       'REACT_APP_DECRYPTION_KEY',
       'REACT_APP_SERVER_URL'
     ];
@@ -49,8 +48,11 @@ function App() {
   // Function to decrypt encoded ID parameter by calling Express server
   const decryptParameter = async (encodedText) => {
     try {
-      // const serverUrl = 'http://localhost:3001';
-      const serverUrl = 'https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net';
+      // SECURITY: Use environment variable or fallback to relative URL
+      // Never hardcode internal IPs or localhost - they get bundled into client code
+      const serverUrl = process.env.REACT_APP_SERVER_URL || 
+                       window.location.origin || 
+                       'https://kauverytelehealth.kauverykonnect.com';
       const apiEndpoint = `${serverUrl}/api/decrypt`;
       
       const response = await fetch(apiEndpoint, {

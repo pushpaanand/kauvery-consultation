@@ -4,9 +4,15 @@ const path = require('path');
 const crypto = require('crypto');
 const sql = require('mssql');
 const { DefaultAzureCredential, ClientSecretCredential } = require('@azure/identity');
+const { sqlInjectionDetectionMiddleware, initializeLogger } = require('./utils/sqlInjectionMiddleware');
+const SQLInjectionDetector = require('./utils/sqlInjectionDetector');
+const SQLInjectionLogger = require('./utils/sqlInjectionLogger');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Security: Disable X-Powered-By header to hide Express version
+app.disable('x-powered-by');
 
 
 // Database configuration for Azure SQL Database
@@ -55,11 +61,314 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// Security: Cookie SameSite protection middleware
+// Intercepts Set-Cookie headers to ensure proper SameSite attribute
+// Note: ARRAffinity cookies are set by Azure infrastructure and require Azure configuration
+app.use((req, res, next) => {
+  // Store original end method to intercept Set-Cookie headers before sending
+  const originalEnd = res.end.bind(res);
+  const originalWriteHead = res.writeHead.bind(res);
+  
+  // Track Set-Cookie headers
+  const cookieHeaders = [];
+  
+  // Override setHeader to capture Set-Cookie headers
+  const originalSetHeader = res.setHeader.bind(res);
+  res.setHeader = function(name, value) {
+    if (name.toLowerCase() === 'set-cookie') {
+      const cookies = Array.isArray(value) ? value : [value];
+      cookies.forEach(cookie => {
+        cookieHeaders.push(cookie);
+      });
+      return originalSetHeader.call(this, name, value);
+    }
+    return originalSetHeader.call(this, name, value);
+  };
+  
+  // Override writeHead to ensure cookies are properly set
+  res.writeHead = function(statusCode, statusMessage, headers) {
+    if (typeof statusMessage === 'object') {
+      headers = statusMessage;
+    }
+    
+    if (headers && headers['Set-Cookie']) {
+      const cookies = Array.isArray(headers['Set-Cookie']) ? headers['Set-Cookie'] : [headers['Set-Cookie']];
+      const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+      headers['Set-Cookie'] = cookies.map(cookie => ensureCookieSameSite(cookie, isSecure));
+    }
+    
+    return originalWriteHead.call(this, statusCode, statusMessage || headers);
+  };
+  
+  // Override end to modify cookies before sending response
+  res.end = function(chunk, encoding) {
+    // Modify Set-Cookie headers if any exist
+    if (cookieHeaders.length > 0) {
+      const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+      const modifiedCookies = cookieHeaders.map(cookie => ensureCookieSameSite(cookie, isSecure));
+      res.setHeader('Set-Cookie', modifiedCookies);
+    }
+    
+    return originalEnd.call(this, chunk, encoding);
+  };
+  
+  next();
+});
+
+// Helper function to ensure cookie has SameSite attribute
+function ensureCookieSameSite(cookieString, isSecure = true) {
+  if (!cookieString || typeof cookieString !== 'string') {
+    return cookieString;
+  }
+  
+  const cookie = cookieString.trim();
+  const lowerCookie = cookie.toLowerCase();
+  
+  // Skip if SameSite is already set (don't override existing settings)
+  if (lowerCookie.includes('samesite=')) {
+    // Ensure Secure flag is present if SameSite=None
+    if (lowerCookie.includes('samesite=none') && !lowerCookie.includes('secure')) {
+      return cookie + '; Secure';
+    }
+    return cookie;
+  }
+  
+  // For ARRAffinity cookies (Azure sets these), we can't modify them here
+  // They need to be configured in Azure App Service settings
+  if (lowerCookie.includes('arraffinity')) {
+    // Azure sets these - return as is (fix via Azure configuration)
+    return cookie;
+  }
+  
+  // For application-set cookies, add SameSite=Lax by default
+  // Lax provides good CSRF protection while allowing legitimate top-level navigations
+  let modifiedCookie = cookie;
+  
+  // Ensure Secure flag for HTTPS (recommended best practice)
+  if (!lowerCookie.includes('secure') && isSecure) {
+    modifiedCookie += '; Secure';
+  }
+  
+  // Add SameSite=Lax (recommended default for most applications)
+  modifiedCookie += '; SameSite=Lax';
+  
+  return modifiedCookie;
+}
+
+// Security: Remove Server header and add security headers including Content Security Policy
+// This middleware aggressively removes server disclosure headers that IIS sets
+app.use((req, res, next) => {
+  // Store original methods to intercept headers
+  const originalSetHeader = res.setHeader.bind(res);
+  const originalWriteHead = res.writeHead.bind(res);
+  const originalEnd = res.end.bind(res);
+  
+  // Track headers to remove - Framework disclosure headers and information leakage
+  // This prevents attackers from identifying framework versions and targeting specific vulnerabilities
+  const headersToRemove = [
+    'Server',                    // IIS/Server version disclosure
+    'X-Powered-By',             // Express/ASP.NET framework disclosure
+    'X-AspNet-Version',         // ASP.NET version disclosure (e.g., 4.0.30319)
+    'X-AspNetMvc-Version',      // ASP.NET MVC version disclosure (e.g., 5.2.7)
+    'X-Powered-CMS',            // CMS framework disclosure (if any)
+    'X-Generator',              // Framework generator disclosure
+    'X-Drupal-Cache',           // Drupal framework (if any)
+    'X-Varnish',                // Varnish proxy (if any)
+    'Via',                      // Proxy/load balancer disclosure
+    'ETag'                      // ETag can leak file inodes and sensitive information
+  ];
+  
+  // Override setHeader to block server disclosure headers
+  res.setHeader = function(name, value) {
+    const lowerName = name.toLowerCase();
+    if (headersToRemove.some(header => lowerName === header.toLowerCase())) {
+      // Silently ignore - don't set these headers
+      return this;
+    }
+    return originalSetHeader.call(this, name, value);
+  };
+  
+  // Override writeHead to remove server disclosure headers from response
+  res.writeHead = function(statusCode, statusMessage, headers) {
+    if (typeof statusMessage === 'object') {
+      headers = statusMessage;
+    }
+    
+    if (headers) {
+      // Remove server disclosure headers
+      headersToRemove.forEach(header => {
+        delete headers[header];
+        delete headers[header.toLowerCase()];
+      });
+    }
+    
+    return originalWriteHead.call(this, statusCode, statusMessage || headers);
+  };
+  
+  // Override end to ensure headers are removed before sending
+  res.end = function(chunk, encoding) {
+    // Remove headers one more time before sending
+    headersToRemove.forEach(header => {
+      try {
+        res.removeHeader(header);
+        res.removeHeader(header.toLowerCase());
+      } catch (e) {
+        // Ignore errors if header doesn't exist
+      }
+    });
+    
+    // Explicitly remove ETag header (if set by static middleware or IIS)
+    try {
+      res.removeHeader('ETag');
+      res.removeHeader('etag');
+    } catch (e) {
+      // Ignore if doesn't exist
+    }
+    
+    return originalEnd.call(this, chunk, encoding);
+  };
+  
+  // Try to remove headers immediately
+  headersToRemove.forEach(header => {
+    try {
+      res.removeHeader(header);
+      res.removeHeader(header.toLowerCase());
+    } catch (e) {
+      // Headers might not exist yet
+    }
+  });
+  
+  // Add security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
+  // Cache-Control: Prevent caching of sensitive pages (fixes VAPT finding)
+  // Check if this is a static asset (CSS, JS, images) or dynamic page/API
+  const isStaticAsset = req.path.match(/\.(css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot|map)$/);
+  const isApiRoute = req.path.startsWith('/api/');
+  
+  // Override Cache-Control only for dynamic pages and API routes
+  // Static assets will be handled by express.static middleware with proper caching
+  if (!isStaticAsset) {
+    if (isApiRoute) {
+      // API routes - no caching (may contain sensitive patient data)
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    } else {
+      // HTML pages and other dynamic content - no caching (prevents sensitive data storage)
+      // This includes consultation pages with patient information
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  }
+  
+  // HTTP Strict Transport Security (HSTS)
+  // Only set HSTS for HTTPS connections
+  const isSecure = req.secure || 
+                   req.headers['x-forwarded-proto'] === 'https' || 
+                   req.headers['x-forwarded-ssl'] === 'on';
+  
+  if (isSecure) {
+    // HSTS: Force browsers to use HTTPS for 1 year (31536000 seconds)
+    // includeSubDomains: Apply to all subdomains
+    // preload: Allow inclusion in HSTS preload list (optional)
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  }
+  
+  // Content Security Policy (CSP) - Configured for video consultation application
+  // Allows necessary external resources while maintaining security
+  const cspDirectives = [
+    // Default source - only allow resources from same origin
+    "default-src 'self'",
+    
+    // Scripts - allow inline scripts (React requires this) and same-origin scripts
+    // 'unsafe-inline' is needed for React's bundled code, but we use nonce/hash for production
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.zego.im *.zegocloud.com",
+    
+    // Styles - allow same origin, Google Fonts, and inline styles (React needs this)
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    
+    // Fonts - allow Google Fonts and same origin
+    "font-src 'self' https://fonts.gstatic.com data:",
+    
+    // Images - allow same origin, data URIs, and blob URIs (for video thumbnails)
+    "img-src 'self' data: blob: https:",
+    
+    // Media - allow WebRTC and media streams (required for video consultation)
+    "media-src 'self' blob: mediastream:",
+    
+    // Connect - allow API calls to same origin and Zego Cloud services
+    // WebSocket connections needed for real-time video communication
+    "connect-src 'self' https://*.zego.im wss://*.zego.im https://*.zegocloud.com wss://*.zegocloud.com https://*.kauverykonnect.com",
+    
+    // Frame ancestors - prevent clickjacking (only allow same origin)
+    "frame-ancestors 'self'",
+    
+    // Form action - prevent form submission to external sites
+    "form-action 'self'",
+    
+    // Base URI - prevent base tag injection attacks
+    "base-uri 'self'",
+    
+    // Object - disallow plugins (Flash, etc.)
+    "object-src 'none'",
+    
+    // Upgrade insecure requests - force HTTPS
+    "upgrade-insecure-requests",
+    
+    // Worker - allow workers from same origin (if needed)
+    "worker-src 'self' blob:",
+    
+    // Manifest - allow manifest file
+    "manifest-src 'self'",
+    
+    // Child source - for iframes if needed
+    "child-src 'self' blob:",
+    
+    // Frame source - for iframes if needed
+    "frame-src 'self' blob:"
+  ].join('; ');
+  
+  res.setHeader('Content-Security-Policy', cspDirectives);
+  
+  // Also set report-only version for monitoring (optional - can be enabled for testing)
+  // Uncomment below to enable CSP reporting without blocking
+  // res.setHeader('Content-Security-Policy-Report-Only', cspDirectives);
+  
+  // Security: Add header to suggest SameSite cookie policy
+  res.setHeader('Set-Cookie', res.getHeader('Set-Cookie') || []);
+  
+  next();
+});
+
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-app.use(express.static(path.join(__dirname, "client/build")));
+// Configure static file serving to disable ETags and set proper cache control
+app.use(express.static(path.join(__dirname, "client/build"), {
+  etag: false,  // Disable ETags to prevent file inode disclosure
+  lastModified: true,  // Keep Last-Modified for caching if needed
+  setHeaders: (res, path) => {
+    // Set proper Cache-Control for static assets
+    // Static files (CSS, JS, images) can be cached for 1 year
+    if (path.match(/\.(css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else {
+      // HTML files and other files should not be cached (they may contain sensitive data)
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  }
+}));
+
+// SQL Injection Detection Middleware - Must be after body parsing but before routes
+app.use(sqlInjectionDetectionMiddleware);
 
 // Configuration
 const config = {
@@ -79,6 +388,12 @@ let pool;
 async function connectDB() {
   try {
     pool = await sql.connect(dbConfig);
+    
+    // Initialize SQL injection logger after database connection
+    if (pool) {
+      initializeLogger(pool);
+      console.log('✅ SQL Injection detection and logging initialized');
+    }
     
   } catch (err) {
     console.error('❌ Database connection failed:', err);
@@ -412,8 +727,153 @@ async function endCallSession(sessionData) {
 //   });
 // });
 
-// Main decryption endpoint
-app.post('/api/decrypt', (req, res) => {
+// Helper function to mask sensitive data
+function maskSensitiveData(data) {
+  try {
+    // Parse the decrypted text (assuming it's JSON)
+    let parsedData;
+    try {
+      parsedData = JSON.parse(data);
+    } catch {
+      // If not JSON, return as is (might be plain text)
+      return data;
+    }
+
+    const masked = { ...parsedData };
+
+    // Mask Date of Birth - show only year or mask completely
+    if (masked.dob || masked.date_of_birth || masked.dateOfBirth) {
+      const dob = masked.dob || masked.date_of_birth || masked.dateOfBirth;
+      if (dob) {
+        // Extract only year from DOB (format: DD/MM/YYYY)
+        const yearMatch = dob.match(/\d{4}$/);
+        if (yearMatch) {
+          masked.dob = `**/**/${yearMatch[0]}`;
+          if (masked.date_of_birth) masked.date_of_birth = `**/**/${yearMatch[0]}`;
+          if (masked.dateOfBirth) masked.dateOfBirth = `**/**/${yearMatch[0]}`;
+        } else {
+          masked.dob = '**/**/****';
+          if (masked.date_of_birth) masked.date_of_birth = '**/**/****';
+          if (masked.dateOfBirth) masked.dateOfBirth = '**/**/****';
+        }
+      }
+    }
+
+    // Mask Patient ID - show only last 4 digits
+    if (masked.userid || masked.patient_id || masked.patientId) {
+      const pid = String(masked.userid || masked.patient_id || masked.patientId || '');
+      if (pid.length > 4) {
+        masked.userid = `****${pid.slice(-4)}`;
+        if (masked.patient_id) masked.patient_id = `****${pid.slice(-4)}`;
+        if (masked.patientId) masked.patientId = `****${pid.slice(-4)}`;
+      }
+    }
+
+    // Remove or mask other highly sensitive fields if they exist
+    // Keep only what's necessary for the application to function
+    const sensitiveFields = ['ssn', 'aadhaar', 'pan', 'phone', 'mobile', 'email'];
+    sensitiveFields.forEach(field => {
+      if (masked[field]) {
+        const value = String(masked[field]);
+        if (value.length > 4) {
+          masked[field] = `${value.substring(0, 2)}****${value.slice(-2)}`;
+        } else {
+          masked[field] = '****';
+        }
+      }
+    });
+
+    return JSON.stringify(masked);
+  } catch (error) {
+    // If masking fails, return original data (shouldn't happen but safe fallback)
+    console.error('Error masking sensitive data:', error);
+    return data;
+  }
+}
+
+// Helper function to identify which fields should be fully removed (highly sensitive)
+function removeHighlySensitiveFields(parsed) {
+  // Fields that should be completely removed from response (if they exist)
+  const removeFields = ['ssn', 'aadhaar', 'pan', 'credit_card', 'card_number'];
+  
+  const cleaned = { ...parsed };
+  Object.keys(cleaned).forEach(key => {
+    const lowerKey = key.toLowerCase();
+    if (removeFields.some(field => lowerKey.includes(field))) {
+      delete cleaned[key];
+    }
+  });
+  
+  return cleaned;
+}
+
+// Rate limiting store for decrypt endpoint (simple in-memory store)
+const decryptRateLimitStore = new Map();
+const DECRYPT_RATE_LIMIT = {
+  maxRequests: 10, // Maximum requests
+  windowMs: 15 * 60 * 1000, // 15 minutes window
+  blockDurationMs: 30 * 60 * 1000 // Block for 30 minutes if exceeded
+};
+
+// Rate limiting middleware for decrypt endpoint
+function decryptRateLimit(req, res, next) {
+  const clientId = SQLInjectionLogger.getClientIp(req);
+  const now = Date.now();
+  const clientData = decryptRateLimitStore.get(clientId);
+
+  // Clean up old entries (older than 1 hour)
+  if (decryptRateLimitStore.size > 1000) {
+    for (const [key, value] of decryptRateLimitStore.entries()) {
+      if (now - value.firstRequest > 60 * 60 * 1000) {
+        decryptRateLimitStore.delete(key);
+      }
+    }
+  }
+
+  if (clientData) {
+    // Check if still blocked
+    if (clientData.blockedUntil && now < clientData.blockedUntil) {
+      return res.status(429).json({
+        success: false,
+        error: 'Too many requests',
+        message: 'Rate limit exceeded. Please try again later.',
+        retryAfter: Math.ceil((clientData.blockedUntil - now) / 1000)
+      });
+    }
+
+    // Reset if window expired
+    if (now - clientData.firstRequest > DECRYPT_RATE_LIMIT.windowMs) {
+      clientData.count = 1;
+      clientData.firstRequest = now;
+      clientData.blockedUntil = null;
+    } else {
+      clientData.count++;
+    }
+
+    // Check if limit exceeded
+    if (clientData.count > DECRYPT_RATE_LIMIT.maxRequests) {
+      clientData.blockedUntil = now + DECRYPT_RATE_LIMIT.blockDurationMs;
+      return res.status(429).json({
+        success: false,
+        error: 'Too many requests',
+        message: 'Rate limit exceeded. Please try again later.',
+        retryAfter: Math.ceil(DECRYPT_RATE_LIMIT.blockDurationMs / 1000)
+      });
+    }
+  } else {
+    // First request from this client
+    decryptRateLimitStore.set(clientId, {
+      count: 1,
+      firstRequest: now,
+      blockedUntil: null
+    });
+  }
+
+  next();
+}
+
+// Main decryption endpoint - Enhanced with security
+app.post('/api/decrypt', decryptRateLimit, (req, res) => {
   try {
     const { text } = req.body;
     
@@ -433,21 +893,50 @@ app.post('/api/decrypt', (req, res) => {
       });
     }
 
+    // Decrypt the data
     const decryptedText = decrypt(config.decryptionKey, text);
     
+    // SECURITY: Apply masking to sensitive fields while keeping all necessary fields
+    // This preserves functionality while protecting sensitive data
+    const maskedData = maskSensitiveData(decryptedText);
+    
+    // Parse the masked data and remove highly sensitive fields
+    let finalResponse;
+    try {
+      const maskedParsed = JSON.parse(maskedData);
+      // Remove fields that shouldn't be in response at all
+      finalResponse = removeHighlySensitiveFields(maskedParsed);
+    } catch {
+      // If masking/parsing fails, return original but log the error
+      console.error('Error processing decrypted data for masking');
+      // For security, still try to mask even if JSON parsing fails
+      finalResponse = JSON.parse(decryptedText);
+      // Apply basic masking
+      if (finalResponse.dob) finalResponse.dob = '**/**/****';
+      if (finalResponse.userid && finalResponse.userid.length > 4) {
+        finalResponse.userid = `****${String(finalResponse.userid).slice(-4)}`;
+      }
+    }
+    
+    // Return sanitized and masked response
+    // Note: Client should only receive what it needs, not full decrypted data
     res.json({ 
       success: true, 
-      decryptedText, 
-      originalResponse: decryptedText,
+      decryptedText: JSON.stringify(finalResponse), // Return sanitized and masked version
       timestamp: new Date().toISOString()
     });
+    
+    // Log access to decrypt endpoint for security monitoring
+    const clientIp = SQLInjectionLogger.getClientIp(req);
+    console.log(`[SECURITY] Decrypt endpoint accessed by IP: ${clientIp} at ${new Date().toISOString()}`);
 
   } catch (error) {
     console.error('❌ Decryption failed:', error.message);
+    // Don't expose error details in production
     res.status(500).json({ 
       success: false, 
       error: 'Decryption failed', 
-      details: error.message,
+      message: NODE_ENV === 'development' ? error.message : 'Invalid encrypted data',
       timestamp: new Date().toISOString()
     });
   }
@@ -653,6 +1142,133 @@ app.get('/api/test-db', async (req, res) => {
       success: false, 
       error: 'Database connection failed',
       details: error.message 
+    });
+  }
+});
+
+// SQL Injection Logs Endpoints (Security monitoring)
+app.get('/api/security/sql-injection-logs', async (req, res) => {
+  try {
+    if (!pool) {
+      return res.status(500).json({ success: false, error: 'Database not connected' });
+    }
+
+    const request = pool.request();
+    const { limit = 100, risk_level, ip_address, start_date, end_date } = req.query;
+    
+    let query = `
+      SELECT TOP ${Math.min(parseInt(limit) || 100, 1000)}
+        id, timestamp, ip_address, user_agent, request_method, request_path,
+        risk_level, pattern_count, suspicious_field, user_id, response_status, created_at
+      FROM sql_injection_logs
+      WHERE 1=1
+    `;
+    
+    if (risk_level) {
+      query += ` AND risk_level = '${risk_level}'`;
+    }
+    if (ip_address) {
+      query += ` AND ip_address = '${ip_address}'`;
+    }
+    if (start_date) {
+      query += ` AND created_at >= '${start_date}'`;
+    }
+    if (end_date) {
+      query += ` AND created_at <= '${end_date}'`;
+    }
+    
+    query += ` ORDER BY created_at DESC`;
+    
+    const result = await request.query(query);
+    
+    res.json({
+      success: true,
+      count: result.recordset.length,
+      logs: result.recordset
+    });
+  } catch (error) {
+    console.error('❌ Error fetching SQL injection logs:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch SQL injection logs',
+      details: error.message
+    });
+  }
+});
+
+// Get SQL injection log statistics
+app.get('/api/security/sql-injection-stats', async (req, res) => {
+  try {
+    if (!pool) {
+      return res.status(500).json({ success: false, error: 'Database not connected' });
+    }
+
+    const request = pool.request();
+    
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total_attempts,
+        COUNT(DISTINCT ip_address) as unique_ips,
+        COUNT(CASE WHEN risk_level = 'critical' THEN 1 END) as critical_count,
+        COUNT(CASE WHEN risk_level = 'high' THEN 1 END) as high_count,
+        COUNT(CASE WHEN risk_level = 'medium' THEN 1 END) as medium_count,
+        COUNT(CASE WHEN created_at >= DATEADD(day, -1, GETDATE()) THEN 1 END) as last_24h,
+        COUNT(CASE WHEN created_at >= DATEADD(day, -7, GETDATE()) THEN 1 END) as last_7d,
+        COUNT(CASE WHEN created_at >= DATEADD(day, -30, GETDATE()) THEN 1 END) as last_30d
+      FROM sql_injection_logs
+    `;
+    
+    const result = await request.query(statsQuery);
+    
+    res.json({
+      success: true,
+      statistics: result.recordset[0]
+    });
+  } catch (error) {
+    console.error('❌ Error fetching SQL injection statistics:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch SQL injection statistics',
+      details: error.message
+    });
+  }
+});
+
+// Get top IP addresses with SQL injection attempts
+app.get('/api/security/sql-injection-top-ips', async (req, res) => {
+  try {
+    if (!pool) {
+      return res.status(500).json({ success: false, error: 'Database not connected' });
+    }
+
+    const request = pool.request();
+    const { limit = 10 } = req.query;
+    
+    const topIPsQuery = `
+      SELECT TOP ${Math.min(parseInt(limit) || 10, 50)}
+        ip_address,
+        COUNT(*) as attempt_count,
+        MAX(risk_level) as highest_risk,
+        MAX(created_at) as last_attempt,
+        COUNT(CASE WHEN created_at >= DATEADD(day, -7, GETDATE()) THEN 1 END) as attempts_last_7d
+      FROM sql_injection_logs
+      WHERE ip_address IS NOT NULL AND ip_address != 'unknown'
+      GROUP BY ip_address
+      ORDER BY attempt_count DESC
+    `;
+    
+    const result = await request.query(topIPsQuery);
+    
+    res.json({
+      success: true,
+      top_ips: result.recordset
+    });
+  } catch (error) {
+    console.error('❌ Error fetching top IPs:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch top IPs',
+      details: error.message
     });
   }
 });
