@@ -1,12 +1,39 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const crypto = require('crypto');
-const sql = require('mssql');
-const { DefaultAzureCredential, ClientSecretCredential } = require('@azure/identity');
-const { sqlInjectionDetectionMiddleware, initializeLogger } = require('./utils/sqlInjectionMiddleware');
-const SQLInjectionDetector = require('./utils/sqlInjectionDetector');
-const SQLInjectionLogger = require('./utils/sqlInjectionLogger');
+// Wrap all requires in try-catch to prevent startup failures
+let express, cors, path, crypto, sql;
+let sqlInjectionDetectionMiddleware, initializeLogger;
+let SQLInjectionDetector, SQLInjectionLogger;
+
+try {
+  express = require('express');
+  cors = require('cors');
+  path = require('path');
+  crypto = require('crypto');
+  sql = require('mssql');
+} catch (err) {
+  console.error('❌ CRITICAL: Failed to load core dependencies:', err.message);
+  process.exit(1);
+}
+
+// Try to load optional SQL injection modules (don't fail if missing)
+try {
+  const sqlInjectionModule = require('./utils/sqlInjectionMiddleware');
+  sqlInjectionDetectionMiddleware = sqlInjectionModule.sqlInjectionDetectionMiddleware || ((req, res, next) => next());
+  initializeLogger = sqlInjectionModule.initializeLogger || (() => {});
+} catch (err) {
+  console.warn('⚠️ SQL Injection middleware not available:', err.message);
+  sqlInjectionDetectionMiddleware = (req, res, next) => next(); // No-op middleware
+  initializeLogger = () => {};
+}
+
+try {
+  SQLInjectionDetector = require('./utils/sqlInjectionDetector');
+  SQLInjectionLogger = require('./utils/sqlInjectionLogger');
+} catch (err) {
+  console.warn('⚠️ SQL Injection utilities not available:', err.message);
+  SQLInjectionDetector = null;
+  SQLInjectionLogger = null;
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -818,9 +845,23 @@ const DECRYPT_RATE_LIMIT = {
   burstWindowMs: 60 * 1000 // 1 minute burst window
 };
 
+// Helper function to get client IP safely
+function getClientIp(req) {
+  if (SQLInjectionLogger && typeof SQLInjectionLogger.getClientIp === 'function') {
+    return SQLInjectionLogger.getClientIp(req);
+  }
+  // Fallback: get IP from request
+  return req.headers['x-forwarded-for']?.split(',')[0] || 
+         req.headers['x-real-ip'] || 
+         req.connection?.remoteAddress || 
+         req.socket?.remoteAddress ||
+         req.ip || 
+         'unknown';
+}
+
 // Rate limiting middleware for decrypt endpoint
 function decryptRateLimit(req, res, next) {
-  const clientId = SQLInjectionLogger.getClientIp(req);
+  const clientId = getClientIp(req);
   const now = Date.now();
   let clientData = decryptRateLimitStore.get(clientId);
 
@@ -998,7 +1039,7 @@ app.post('/api/decrypt/batch', decryptRateLimit, async (req, res) => {
     });
 
     // Log batch decrypt access
-    const clientIp = SQLInjectionLogger.getClientIp(req);
+    const clientIp = getClientIp(req);
     console.log(`[SECURITY] Batch decrypt endpoint accessed by IP: ${clientIp} at ${new Date().toISOString()}, items: ${texts.length}`);
 
     res.json({
@@ -1085,7 +1126,7 @@ app.post('/api/decrypt', decryptRateLimit, (req, res) => {
     });
     
     // Log access to decrypt endpoint for security monitoring
-    const clientIp = SQLInjectionLogger.getClientIp(req);
+    const clientIp = getClientIp(req);
     console.log(`[SECURITY] Decrypt endpoint accessed by IP: ${clientIp} at ${new Date().toISOString()}`);
 
   } catch (error) {
