@@ -11,7 +11,21 @@ try {
   sql = require('mssql');
 } catch (err) {
   console.error('❌ CRITICAL: Failed to load core dependencies:', err.message);
-  process.exit(1);
+  console.error('Stack:', err.stack);
+  // Don't exit - create a minimal fallback app
+  console.log('⚠️ Creating minimal fallback server due to missing dependencies...');
+  const minimalExpress = require('express');
+  const minimalApp = minimalExpress();
+  minimalApp.get('*', (req, res) => {
+    res.status(500).json({ 
+      error: 'Server initialization failed', 
+      message: 'Failed to load core dependencies: ' + err.message,
+      path: req.path 
+    });
+  });
+  module.exports = minimalApp;
+  // Exit this module initialization but export minimal app
+  return;
 }
 
 // Try to load optional SQL injection modules (don't fail if missing)
@@ -1467,7 +1481,7 @@ app.get('/api/security/sql-injection-top-ips', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch top IPs',
-      details: error.message
+      details: error.message 
     });
   }
 });
@@ -1552,7 +1566,7 @@ try {
   // Connect to database (non-blocking for Azure deployment)
   (async function connectDatabase() {
     try {
-      await connectDB();
+  await connectDB();
       console.log('✅ Database connection established');
     } catch (error) {
       console.error('⚠️ Database connection failed (server will continue):', error.message);
@@ -1562,7 +1576,7 @@ try {
 
   // Only call app.listen() if NOT running under iisnode (local development)
   if (!isRunningUnderIISNode) {
-    app.listen(PORT, () => {
+  app.listen(PORT, () => {
       console.log(`🚀 Server listening on port ${PORT} (local development)`);
       console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected'}`);
     });
@@ -1577,4 +1591,20 @@ try {
   // Don't exit - let iisnode handle it
 }
 
+// Ensure app is always exported, even if there were errors
+try {
 module.exports = app;
+} catch (error) {
+  console.error('❌ Failed to export app:', error);
+  // Create minimal fallback app
+  const express = require('express');
+  const fallbackApp = express();
+  fallbackApp.get('*', (req, res) => {
+    res.status(500).json({ 
+      error: 'Server initialization error', 
+      message: error.message,
+      path: req.path 
+    });
+  });
+  module.exports = fallbackApp;
+}
