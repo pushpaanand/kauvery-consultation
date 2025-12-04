@@ -810,16 +810,18 @@ function removeHighlySensitiveFields(parsed) {
 // Rate limiting store for decrypt endpoint (simple in-memory store)
 const decryptRateLimitStore = new Map();
 const DECRYPT_RATE_LIMIT = {
-  maxRequests: 10, // Maximum requests
+  maxRequests: 20, // Maximum requests (increased to accommodate batch operations)
   windowMs: 15 * 60 * 1000, // 15 minutes window
-  blockDurationMs: 30 * 60 * 1000 // Block for 30 minutes if exceeded
+  blockDurationMs: 30 * 60 * 1000, // Block for 30 minutes if exceeded
+  burstAllowance: 10, // Allow up to 10 requests within 1 minute for legitimate batch operations
+  burstWindowMs: 60 * 1000 // 1 minute burst window
 };
 
 // Rate limiting middleware for decrypt endpoint
 function decryptRateLimit(req, res, next) {
   const clientId = SQLInjectionLogger.getClientIp(req);
   const now = Date.now();
-  const clientData = decryptRateLimitStore.get(clientId);
+  let clientData = decryptRateLimitStore.get(clientId);
 
   // Clean up old entries (older than 1 hour)
   if (decryptRateLimitStore.size > 1000) {
@@ -841,16 +843,49 @@ function decryptRateLimit(req, res, next) {
       });
     }
 
-    // Reset if window expired
+    // Track burst requests (requests within 1 minute)
+    if (!clientData.burstRequests) {
+      clientData.burstRequests = [];
+    }
+    
+    // Remove burst requests older than 1 minute
+    clientData.burstRequests = clientData.burstRequests.filter(
+      timestamp => now - timestamp < DECRYPT_RATE_LIMIT.burstWindowMs
+    );
+    
+    // Check burst limit (for legitimate batch operations)
+    if (clientData.burstRequests.length >= DECRYPT_RATE_LIMIT.burstAllowance) {
+      // Allow burst if within first minute and total count is reasonable
+      const burstAge = clientData.burstRequests.length > 0 
+        ? now - clientData.burstRequests[0] 
+        : 0;
+      
+      // If burst is too fast (more than 10 requests in less than 2 seconds), block
+      if (burstAge < 2000 && clientData.burstRequests.length > DECRYPT_RATE_LIMIT.burstAllowance) {
+        clientData.blockedUntil = now + DECRYPT_RATE_LIMIT.blockDurationMs;
+        return res.status(429).json({
+          success: false,
+          error: 'Too many requests',
+          message: 'Rate limit exceeded. Please try again later.',
+          retryAfter: Math.ceil(DECRYPT_RATE_LIMIT.blockDurationMs / 1000)
+        });
+      }
+    }
+    
+    // Add current request to burst tracker
+    clientData.burstRequests.push(now);
+
+    // Reset if main window expired
     if (now - clientData.firstRequest > DECRYPT_RATE_LIMIT.windowMs) {
       clientData.count = 1;
       clientData.firstRequest = now;
       clientData.blockedUntil = null;
+      clientData.burstRequests = [now];
     } else {
       clientData.count++;
     }
 
-    // Check if limit exceeded
+    // Check if main limit exceeded
     if (clientData.count > DECRYPT_RATE_LIMIT.maxRequests) {
       clientData.blockedUntil = now + DECRYPT_RATE_LIMIT.blockDurationMs;
       return res.status(429).json({
@@ -862,17 +897,128 @@ function decryptRateLimit(req, res, next) {
     }
   } else {
     // First request from this client
-    decryptRateLimitStore.set(clientId, {
+    clientData = {
       count: 1,
       firstRequest: now,
-      blockedUntil: null
-    });
+      blockedUntil: null,
+      burstRequests: [now]
+    };
+    decryptRateLimitStore.set(clientId, clientData);
   }
 
   next();
 }
 
-// Main decryption endpoint - Enhanced with security
+// Batch decryption endpoint - Decrypt multiple parameters at once
+app.post('/api/decrypt/batch', decryptRateLimit, async (req, res) => {
+  try {
+    const { texts } = req.body;
+    
+    if (!texts || !Array.isArray(texts)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid input',
+        message: 'texts must be an array of encrypted strings' 
+      });
+    }
+
+    if (texts.length > 20) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Too many items',
+        message: 'Maximum 20 items allowed per batch request' 
+      });
+    }
+
+    const results = {};
+    const errors = {};
+
+    // Decrypt each text in parallel
+    const decryptPromises = texts.map(async (item) => {
+      const { key, text } = item;
+      
+      if (!key || !text || typeof text !== 'string') {
+        errors[key] = 'Invalid input';
+        return { key, error: 'Invalid input' };
+      }
+
+      if (text.length > 1000) {
+        errors[key] = 'Input too large';
+        return { key, error: 'Input too large' };
+      }
+
+      try {
+        const decryptedText = decrypt(config.decryptionKey, text);
+        
+        // Check if decrypted text is JSON or plain string
+        let finalResponse;
+        let isJSON = false;
+        
+        try {
+          const parsed = JSON.parse(decryptedText);
+          isJSON = true;
+          
+          const maskedData = maskSensitiveData(decryptedText);
+          
+          try {
+            const maskedParsed = JSON.parse(maskedData);
+            finalResponse = removeHighlySensitiveFields(maskedParsed);
+          } catch {
+            finalResponse = parsed;
+            if (finalResponse.dob) finalResponse.dob = '**/**/****';
+            if (finalResponse.userid && finalResponse.userid.length > 4) {
+              finalResponse.userid = `****${String(finalResponse.userid).slice(-4)}`;
+            }
+          }
+        } catch {
+          finalResponse = decryptedText;
+          isJSON = false;
+        }
+        
+        return {
+          key,
+          decryptedText: isJSON ? JSON.stringify(finalResponse) : finalResponse
+        };
+      } catch (error) {
+        errors[key] = error.message;
+        return { key, error: error.message };
+      }
+    });
+
+    const decryptResults = await Promise.all(decryptPromises);
+    
+    // Organize results
+    decryptResults.forEach(result => {
+      if (result.error) {
+        errors[result.key] = result.error;
+      } else {
+        results[result.key] = result.decryptedText;
+      }
+    });
+
+    // Log batch decrypt access
+    const clientIp = SQLInjectionLogger.getClientIp(req);
+    console.log(`[SECURITY] Batch decrypt endpoint accessed by IP: ${clientIp} at ${new Date().toISOString()}, items: ${texts.length}`);
+
+    res.json({
+      success: true,
+      results,
+      errors: Object.keys(errors).length > 0 ? errors : undefined,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Batch decryption failed:', error.message);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Batch decryption failed', 
+      message: NODE_ENV === 'development' ? error.message : 'Invalid encrypted data',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Main decryption endpoint - Enhanced with security (single item)
 app.post('/api/decrypt', decryptRateLimit, (req, res) => {
   try {
     const { text } = req.body;
@@ -896,33 +1042,44 @@ app.post('/api/decrypt', decryptRateLimit, (req, res) => {
     // Decrypt the data
     const decryptedText = decrypt(config.decryptionKey, text);
     
-    // SECURITY: Apply masking to sensitive fields while keeping all necessary fields
-    // This preserves functionality while protecting sensitive data
-    const maskedData = maskSensitiveData(decryptedText);
-    
-    // Parse the masked data and remove highly sensitive fields
+    // Check if decrypted text is JSON or plain string
     let finalResponse;
+    let isJSON = false;
+    
     try {
-      const maskedParsed = JSON.parse(maskedData);
-      // Remove fields that shouldn't be in response at all
-      finalResponse = removeHighlySensitiveFields(maskedParsed);
-    } catch {
-      // If masking/parsing fails, return original but log the error
-      console.error('Error processing decrypted data for masking');
-      // For security, still try to mask even if JSON parsing fails
-      finalResponse = JSON.parse(decryptedText);
-      // Apply basic masking
-      if (finalResponse.dob) finalResponse.dob = '**/**/****';
-      if (finalResponse.userid && finalResponse.userid.length > 4) {
-        finalResponse.userid = `****${String(finalResponse.userid).slice(-4)}`;
+      // Try to parse as JSON first
+      const parsed = JSON.parse(decryptedText);
+      isJSON = true;
+      
+      // SECURITY: Apply masking to sensitive fields while keeping all necessary fields
+      // This preserves functionality while protecting sensitive data
+      const maskedData = maskSensitiveData(decryptedText);
+      
+      try {
+        const maskedParsed = JSON.parse(maskedData);
+        // Remove fields that shouldn't be in response at all
+        finalResponse = removeHighlySensitiveFields(maskedParsed);
+      } catch {
+        // If masked data parsing fails, use original parsed data with basic masking
+        finalResponse = parsed;
+        // Apply basic masking
+        if (finalResponse.dob) finalResponse.dob = '**/**/****';
+        if (finalResponse.userid && finalResponse.userid.length > 4) {
+          finalResponse.userid = `****${String(finalResponse.userid).slice(-4)}`;
+        }
       }
+    } catch {
+      // Decrypted text is not JSON - it's a plain string (e.g., "CN206201")
+      // Return as-is without masking (plain strings are typically non-sensitive identifiers)
+      finalResponse = decryptedText;
+      isJSON = false;
     }
     
     // Return sanitized and masked response
     // Note: Client should only receive what it needs, not full decrypted data
     res.json({ 
       success: true, 
-      decryptedText: JSON.stringify(finalResponse), // Return sanitized and masked version
+      decryptedText: isJSON ? JSON.stringify(finalResponse) : finalResponse, // Return JSON string if object, plain string if text
       timestamp: new Date().toISOString()
     });
     

@@ -50,6 +50,7 @@ function App() {
     try {
       // SECURITY: Use environment variable or fallback to relative URL
       // Never hardcode internal IPs or localhost - they get bundled into client code
+      // const serverUrl = 'http://localhost:3001';
       const serverUrl = process.env.REACT_APP_SERVER_URL || 
                        window.location.origin || 
                        'https://kauverytelehealth.kauverykonnect.com';
@@ -147,42 +148,86 @@ function App() {
     };
   };
 
-  // Add new function to decrypt multiple parameters individually
+  // Batch decrypt function - Decrypt multiple parameters in a single request
+  const batchDecryptParameters = async (paramMap) => {
+    try {
+      // const serverUrl = 'http://localhost:3001';
+      const serverUrl = process.env.REACT_APP_SERVER_URL || 
+                       window.location.origin || 
+                       'https://kauverytelehealth.kauverykonnect.com';
+      const apiEndpoint = `${serverUrl}/api/decrypt/batch`;
+      
+      // Prepare batch request - map parameter keys to encrypted texts
+      const texts = Object.entries(paramMap)
+        .filter(([key, value]) => value) // Only include non-empty values
+        .map(([key, value]) => ({ key, text: value }));
+      
+      if (texts.length === 0) {
+        return {};
+      }
+      
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ texts }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ App.js: Batch decrypt server error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Batch decryption failed');
+      }
+      
+      // Map results back to parameter names
+      const decryptedData = {};
+      const paramMapping = {
+        'a': 'app_no',
+        'un': 'username',
+        'ui': 'userid',
+        'd': 'doctorname',
+        's': 'speciality',
+        'ad': 'appointment_date',
+        'at': 'appointment_time'
+      };
+      
+      Object.entries(data.results || {}).forEach(([key, value]) => {
+        const mappedKey = paramMapping[key] || key;
+        decryptedData[mappedKey] = value;
+      });
+      
+      return decryptedData;
+    } catch (error) {
+      console.error('❌ App.js: Batch decryption failed:', error);
+      throw error;
+    }
+  };
+
+  // Add new function to decrypt multiple parameters using batch endpoint
   const processMultipleEncryptedParams = async (params) => {
     try {
       setIsDecrypting(true);
       setDecryptionError(null);
       
-      const decryptedData = {};
+      // Prepare parameters map for batch decryption
+      const paramMap = {};
+      if (params.a) paramMap.a = params.a;
+      if (params.un) paramMap.un = params.un;
+      if (params.ui) paramMap.ui = params.ui;
+      if (params.d) paramMap.d = params.d;
+      if (params.s) paramMap.s = params.s;
+      if (params.ad) paramMap.ad = params.ad;
+      if (params.at) paramMap.at = params.at;
       
-      // Decrypt each parameter individually
-      if (params.a) {
-        decryptedData.app_no = await decryptParameter(params.a);
-      }
-      
-      if (params.un) {
-        decryptedData.username = await decryptParameter(params.un);
-      }
-      
-      if (params.ui) {
-        decryptedData.userid = await decryptParameter(params.ui);
-      }
-      
-      if (params.d) {
-        decryptedData.doctorname = await decryptParameter(params.d);
-      }
-      
-      if (params.s) {
-        decryptedData.speciality = await decryptParameter(params.s);
-      }
-      
-      if (params.ad) {
-        decryptedData.appointment_date = await decryptParameter(params.ad);
-      }
-      
-      if (params.at) {
-        decryptedData.appointment_time = await decryptParameter(params.at);
-      }
+      // Decrypt all parameters in a single batch request
+      const decryptedData = await batchDecryptParameters(paramMap);
       
       // Create appointment data object with all decrypted parameters
       const appointmentData = {
