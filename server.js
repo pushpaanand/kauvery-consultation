@@ -376,10 +376,11 @@ const config = {
   environment: NODE_ENV
 };
 
-// Validate configuration
+// Validate configuration (log warning but don't crash - allow server to start)
 if (!config.decryptionKey || config.decryptionKey.length < 16) {
-  console.error('❌ Invalid decryption key configuration');
-  process.exit(1);
+  console.error('❌ WARNING: Invalid decryption key configuration');
+  console.error('❌ Decryption functionality will not work properly');
+  // Don't exit - allow server to start (decryption will fail gracefully with error messages)
 }
 
 // Database connection pool
@@ -1455,10 +1456,42 @@ app.get('/api/security/sql-injection-top-ips', async (req, res) => {
 //   console.log(`🚀 Server running on port ${PORT}`);
 //   console.log(`📊 Database connected: ${dbConfig.database}`);
 // });
+// Health check endpoint - should be accessible even if other things fail
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: NODE_ENV,
+    isIISNode: !!(process.env.IISNODE_VERSION || process.env.WEBSITE_SITE_NAME),
+    database: pool ? 'connected' : 'not connected'
+  });
+});
+
 // Serve React app (catch-all) - must be after API routes
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client', 'build', 'index.html'));
+app.get('*', (req, res, next) => {
+  const indexPath = path.join(__dirname, 'client', 'build', 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error('❌ Error sending index.html:', err.message);
+      // If index.html doesn't exist, return a simple response
+      if (err.code === 'ENOENT') {
+        res.status(404).send(`
+          <!DOCTYPE html>
+          <html>
+            <head><title>Application Not Found</title></head>
+            <body>
+              <h1>Application Not Found</h1>
+              <p>The React build files are missing. Please ensure the client has been built.</p>
+              <p>Expected path: ${indexPath}</p>
+            </body>
+          </html>
+        `);
+      } else {
+        next(err);
+      }
+    }
+  });
 });
 
 // Error handler - last middleware
@@ -1472,29 +1505,35 @@ app.use((err, req, res, next) => {
 
 // Azure App Service / iisnode: Do NOT call app.listen() - iisnode handles the HTTP server
 // For local development, we can call app.listen() if not running under iisnode
-const isRunningUnderIISNode = process.env.IISNODE_VERSION || process.env.WEBSITE_SITE_NAME; // Azure sets these
+try {
+  const isRunningUnderIISNode = process.env.IISNODE_VERSION || process.env.WEBSITE_SITE_NAME; // Azure sets these
 
-// Connect to database (non-blocking for Azure deployment)
-(async function connectDatabase() {
-  try {
-    await connectDB();
-    console.log('✅ Database connection established');
-  } catch (error) {
-    console.error('⚠️ Database connection failed (server will continue):', error.message);
-    // Don't exit - let the server continue without database for now
+  // Connect to database (non-blocking for Azure deployment)
+  (async function connectDatabase() {
+    try {
+      await connectDB();
+      console.log('✅ Database connection established');
+    } catch (error) {
+      console.error('⚠️ Database connection failed (server will continue):', error.message);
+      // Don't exit - let the server continue without database for now
+    }
+  })();
+
+  // Only call app.listen() if NOT running under iisnode (local development)
+  if (!isRunningUnderIISNode) {
+    app.listen(PORT, () => {
+      console.log(`🚀 Server listening on port ${PORT} (local development)`);
+      console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected'}`);
+    });
+  } else {
+    // Running under iisnode (Azure App Service)
+    console.log('🚀 Server ready for iisnode (Azure App Service)');
+    console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected (connecting in background...)'}`);
   }
-})();
-
-// Only call app.listen() if NOT running under iisnode (local development)
-if (!isRunningUnderIISNode) {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server listening on port ${PORT} (local development)`);
-    console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected'}`);
-  });
-} else {
-  // Running under iisnode (Azure App Service)
-  console.log('🚀 Server ready for iisnode (Azure App Service)');
-  console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected (connecting in background...)'}`);
+} catch (error) {
+  console.error('❌ Error during server initialization:', error);
+  console.error('Stack:', error.stack);
+  // Don't exit - let iisnode handle it
 }
 
 module.exports = app;
