@@ -1470,12 +1470,31 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: 'Internal server error', details: NODE_ENV === 'development' ? err.message : undefined });
 });
 
-// Start: connect DB then start server
-(async function main() {
-  await connectDB();
-  app.listen(PORT, () => {
-    console.log(`🚀 Server listening on port ${PORT}. DB connected: ${!!pool}`);
-  });
+// Azure App Service / iisnode: Do NOT call app.listen() - iisnode handles the HTTP server
+// For local development, we can call app.listen() if not running under iisnode
+const isRunningUnderIISNode = process.env.IISNODE_VERSION || process.env.WEBSITE_SITE_NAME; // Azure sets these
+
+// Connect to database (non-blocking for Azure deployment)
+(async function connectDatabase() {
+  try {
+    await connectDB();
+    console.log('✅ Database connection established');
+  } catch (error) {
+    console.error('⚠️ Database connection failed (server will continue):', error.message);
+    // Don't exit - let the server continue without database for now
+  }
 })();
+
+// Only call app.listen() if NOT running under iisnode (local development)
+if (!isRunningUnderIISNode) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server listening on port ${PORT} (local development)`);
+    console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected'}`);
+  });
+} else {
+  // Running under iisnode (Azure App Service)
+  console.log('🚀 Server ready for iisnode (Azure App Service)');
+  console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected (connecting in background...)'}`);
+}
 
 module.exports = app;
