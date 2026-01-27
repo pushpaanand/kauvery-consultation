@@ -13,6 +13,17 @@ function App() {
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [decryptionComplete, setDecryptionComplete] = useState(false);
   const [decryptionError, setDecryptionError] = useState(null);
+  const [requiresOtp, setRequiresOtp] = useState(false);
+  const [otpStep, setOtpStep] = useState('idle'); // idle | mobile | otp | verified
+  const [mobileInput, setMobileInput] = useState('');
+  const [otpInput, setOtpInput] = useState('');
+  const [precheckId, setPrecheckId] = useState(null);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [maskedMobile, setMaskedMobile] = useState('');
+  const [appointmentHint, setAppointmentHint] = useState('');
+  const [encryptedParams, setEncryptedParams] = useState(null);
+  const [linkHash, setLinkHash] = useState('');
 
   // Environment validation function
   const validateEnvironment = () => {
@@ -34,6 +45,251 @@ function App() {
     return true;
   };
 
+  const renderOtpMobileScreen = () => (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100vh',
+      background: 'white',
+      color: '#962067',
+      fontFamily: "'Poppins', sans-serif",
+      textAlign: 'center',
+      padding: '20px 20px 60px 20px',
+      boxSizing: 'border-box'
+    }}>
+      <div style={{
+        background: 'white',
+        borderRadius: '20px',
+        padding: '40px',
+        maxWidth: '520px',
+        width: '100%',
+        boxShadow: '0 8px 25px rgba(150, 32, 103, 0.15)',
+        border: '3px solid #962067',
+        textAlign: 'left'
+      }}>
+        <h1 style={{
+          color: '#962067',
+          fontSize: '26px',
+          fontWeight: '700',
+          margin: '0 0 16px 0'
+        }}>
+          Verify your mobile number
+        </h1>
+        <p style={{
+          color: '#58595B',
+          fontSize: '16px',
+          lineHeight: '1.6',
+          margin: '0 0 24px 0'
+        }}>
+          Enter the mobile number registered with Kauvery Hospital
+          {appointmentHint ? ` (appointment ending with ${appointmentHint})` : ''} to receive an OTP.
+        </p>
+        <form onSubmit={handleSendOtp}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
+            Mobile Number
+          </label>
+          <input
+            type="tel"
+            value={mobileInput}
+            onChange={(e) => setMobileInput(sanitizeMobileInput(e.target.value))}
+            placeholder="Enter registered mobile number"
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              borderRadius: '12px',
+              border: '2px solid #E5E5EA',
+              fontSize: '16px',
+              marginBottom: '16px',
+              fontFamily: "'Poppins', sans-serif"
+            }}
+          />
+          {otpError && (
+            <div style={{ color: '#cc0000', marginBottom: '16px', fontWeight: 600 }}>
+              {otpError}
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={otpLoading}
+            style={{
+              width: '100%',
+              background: otpLoading ? '#C3C3C3' : 'linear-gradient(135deg, #962067, #A23293)',
+              color: 'white',
+              border: 'none',
+              padding: '12px 24px',
+              borderRadius: '20px',
+              cursor: otpLoading ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              fontWeight: '600',
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.3s ease',
+              boxShadow: '0 4px 15px rgba(150, 32, 103, 0.2)'
+            }}
+          >
+            {otpLoading ? 'Sending OTP...' : 'Send OTP'}
+          </button>
+        </form>
+      </div>
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        background: 'linear-gradient(135deg, #962067, #A23293)',
+        color: 'white',
+        padding: '12px 20px',
+        textAlign: 'center',
+        fontSize: '13px',
+        fontFamily: "'Poppins', sans-serif",
+        height: '48px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        © 2025 Kauvery Hospital. All rights reserved.
+      </div>
+    </div>
+  );
+
+  const renderOtpVerificationScreen = () => (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100vh',
+      background: 'white',
+      color: '#962067',
+      fontFamily: "'Poppins', sans-serif",
+      textAlign: 'center',
+      padding: '20px 20px 60px 20px',
+      boxSizing: 'border-box'
+    }}>
+      <div style={{
+        background: 'white',
+        borderRadius: '20px',
+        padding: '40px',
+        maxWidth: '520px',
+        width: '100%',
+        boxShadow: '0 8px 25px rgba(150, 32, 103, 0.15)',
+        border: '3px solid #962067',
+        textAlign: 'left'
+      }}>
+        <h1 style={{
+          color: '#962067',
+          fontSize: '26px',
+          fontWeight: '700',
+          margin: '0 0 16px 0'
+        }}>
+          Enter OTP
+        </h1>
+        <p style={{
+          color: '#58595B',
+          fontSize: '16px',
+          lineHeight: '1.6',
+          margin: '0 0 24px 0'
+        }}>
+          We sent a verification code to <strong>{maskedMobile || 'your mobile number'}</strong>.
+          Please enter the OTP below to continue.
+        </p>
+        <form onSubmit={handleVerifyOtp}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
+            One-Time Password (OTP)
+          </label>
+          <input
+            type="tel"
+            value={otpInput}
+            onChange={(e) => setOtpInput(sanitizeMobileInput(e.target.value).slice(0, 6))}
+            placeholder="Enter OTP"
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              borderRadius: '12px',
+              border: '2px solid #E5E5EA',
+              fontSize: '16px',
+              marginBottom: '16px',
+              fontFamily: "'Poppins', sans-serif",
+              letterSpacing: '4px',
+              textAlign: 'center'
+            }}
+          />
+          {otpError && (
+            <div style={{ color: '#cc0000', marginBottom: '16px', fontWeight: 600 }}>
+              {otpError}
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={otpLoading}
+            style={{
+              width: '100%',
+              background: otpLoading ? '#C3C3C3' : 'linear-gradient(135deg, #962067, #A23293)',
+              color: 'white',
+              border: 'none',
+              padding: '12px 24px',
+              borderRadius: '20px',
+              cursor: otpLoading ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              fontWeight: '600',
+              fontFamily: "'Poppins', sans-serif",
+              transition: 'all 0.3s ease',
+              boxShadow: '0 4px 15px rgba(150, 32, 103, 0.2)',
+              marginBottom: '12px'
+            }}
+          >
+            {otpLoading ? 'Verifying...' : 'Verify & Continue'}
+          </button>
+        </form>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={handleResendOtp}
+            disabled={otpLoading}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#962067',
+              fontWeight: 600,
+              cursor: otpLoading ? 'not-allowed' : 'pointer'
+            }}
+          >
+            Resend OTP
+          </button>
+          <button
+            type="button"
+            onClick={handleChangeMobile}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#58595B',
+              cursor: 'pointer'
+            }}
+          >
+            Change mobile number
+          </button>
+        </div>
+      </div>
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        background: 'linear-gradient(135deg, #962067, #A23293)',
+        color: 'white',
+        padding: '12px 20px',
+        textAlign: 'center',
+        fontSize: '13px',
+        fontFamily: "'Poppins', sans-serif",
+        height: '48px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        © 2025 Kauvery Hospital. All rights reserved.
+      </div>
+    </div>
+  );
+
   // Validate environment variables on startup
   useEffect(() => {
     const isValid = validateEnvironment();
@@ -45,15 +301,26 @@ function App() {
     }
   }, []);
 
+  const getServerUrl = () => {
+    return process.env.REACT_APP_SERVER_URL || 
+           window.location.origin || 
+           'https://kauverytelehealth.kauverykonnect.com';
+  };
+
+  const sanitizeMobileInput = (value = '') => value.replace(/\D/g, '').slice(0, 15);
+
+  const clearConsultationSession = () => {
+    sessionStorage.removeItem('consultationAccessToken');
+    sessionStorage.removeItem('consultationLinkHash');
+    setLinkHash('');
+    setPrecheckId(null);
+    setOtpInput('');
+  };
+
   // Function to decrypt encoded ID parameter by calling Express server
   const decryptParameter = async (encodedText) => {
     try {
-      // SECURITY: Use environment variable or fallback to relative URL
-      // Never hardcode internal IPs or localhost - they get bundled into client code
-      // const serverUrl = 'http://localhost:3001';
-      const serverUrl = process.env.REACT_APP_SERVER_URL || 
-                       window.location.origin || 
-                       'https://kauverytelehealth.kauverykonnect.com';
+      const serverUrl = getServerUrl();
       const apiEndpoint = `${serverUrl}/api/decrypt`;
       
       const response = await fetch(apiEndpoint, {
@@ -151,11 +418,13 @@ function App() {
   // Batch decrypt function - Decrypt multiple parameters in a single request
   const batchDecryptParameters = async (paramMap) => {
     try {
-      // const serverUrl = 'http://localhost:3001';
-      const serverUrl = process.env.REACT_APP_SERVER_URL || 
-                       window.location.origin || 
-                       'https://kauverytelehealth.kauverykonnect.com';
-      const apiEndpoint = `${serverUrl}/api/decrypt/batch`;
+      const serverUrl = getServerUrl();
+      const consultationToken = sessionStorage.getItem('consultationAccessToken');
+      const consultationLinkHash = sessionStorage.getItem('consultationLinkHash');
+      const secureEndpointEnabled = Boolean(consultationToken && consultationLinkHash);
+      const apiEndpoint = secureEndpointEnabled 
+        ? `${serverUrl}/api/consultation/decrypt/batch`
+        : `${serverUrl}/api/decrypt/batch`;
       
       // Prepare batch request - map parameter keys to encrypted texts
       const texts = Object.entries(paramMap)
@@ -170,6 +439,8 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(consultationToken ? { 'X-Consultation-Token': consultationToken } : {}),
+          ...(consultationLinkHash ? { 'X-Consultation-Link': consultationLinkHash } : {})
         },
         body: JSON.stringify({ texts }),
       });
@@ -177,6 +448,11 @@ function App() {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ App.js: Batch decrypt server error response:', errorText);
+        if (response.status === 401 || response.status === 403) {
+          const authError = new Error('Verification expired. Please request a new OTP.');
+          authError.code = 'CONSULTATION_ACCESS_DENIED';
+          throw authError;
+        }
         throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
       
@@ -281,10 +557,122 @@ function App() {
       
     } catch (error) {
       console.error('❌ App.js: Failed to process multiple encrypted parameters:', error);
+      if (error.code === 'CONSULTATION_ACCESS_DENIED') {
+        clearConsultationSession();
+        setOtpError('Your verification expired. Please request a new OTP.');
+        setOtpStep('mobile');
+        setIsDecrypting(false);
+        setDecryptionComplete(false);
+        setIsTokenValid(false);
+        setDecryptionError(null);
+        return;
+      }
       setDecryptionError(error.message);
       setIsDecrypting(false);
       setIsTokenValid(false);
     }
+  };
+
+  const requestOtpForMobile = async () => {
+    if (!encryptedParams) {
+      setOtpError('Invalid consultation link. Please use the link shared via SMS/Email.');
+      return;
+    }
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const serverUrl = getServerUrl();
+      const response = await fetch(`${serverUrl}/api/consultation/precheck`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mobile: mobileInput,
+          params: encryptedParams
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Unable to send OTP. Please try again.');
+      }
+
+      setPrecheckId(data.precheckId);
+      setMaskedMobile(data.maskedMobile || '');
+      setAppointmentHint(data.appointmentHint || '');
+      setOtpStep('otp');
+      setOtpInput('');
+      if (data.linkHash) {
+        sessionStorage.setItem('consultationLinkHash', data.linkHash);
+        setLinkHash(data.linkHash);
+      }
+      setOtpError('');
+    } catch (error) {
+      console.error('❌ OTP request failed:', error);
+      setOtpError(error.message || 'Unable to send OTP. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleSendOtp = async (event) => {
+    event?.preventDefault();
+    if (!mobileInput || mobileInput.length < 8) {
+      setOtpError('Please enter the mobile number registered with Kauvery Hospital.');
+      return;
+    }
+    await requestOtpForMobile();
+  };
+
+  const handleVerifyOtp = async (event) => {
+    event?.preventDefault();
+    if (!precheckId) {
+      setOtpError('OTP session expired. Please request a new OTP.');
+      return;
+    }
+    if (!otpInput || otpInput.length < 4) {
+      setOtpError('Please enter the OTP sent to your mobile.');
+      return;
+    }
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const serverUrl = getServerUrl();
+      const response = await fetch(`${serverUrl}/api/consultation/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          precheckId,
+          otp: otpInput
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Invalid OTP. Please try again.');
+      }
+
+      if (data.token) {
+        sessionStorage.setItem('consultationAccessToken', data.token);
+      }
+      setOtpStep('verified');
+      setOtpError('');
+      setOtpInput('');
+    } catch (error) {
+      console.error('❌ OTP verification failed:', error);
+      setOtpError(error.message || 'OTP verification failed. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    await requestOtpForMobile();
+  };
+
+  const handleChangeMobile = () => {
+    clearConsultationSession();
+    setMaskedMobile('');
+    setMobileInput('');
+    setOtpStep('mobile');
+    setOtpError('');
   };
 
   // Simple and correct validateAppointmentDate function
@@ -320,14 +708,26 @@ function App() {
 
   useEffect(() => {
     const params = getQueryParams();
-
-    // Check if we have the new encrypted parameters format
     const hasNewEncryptedParams = params.a || params.un || params.ui || params.d || params.s || params.ad || params.at;
-    
+
     if (hasNewEncryptedParams) {
-      processMultipleEncryptedParams(params);
+      setEncryptedParams(params);
+      setRequiresOtp(true);
+      const storedToken = sessionStorage.getItem('consultationAccessToken');
+      const storedLinkHash = sessionStorage.getItem('consultationLinkHash');
+      if (storedLinkHash) {
+        setLinkHash(storedLinkHash);
+      }
+      if (storedToken && storedLinkHash) {
+        setOtpStep('verified');
+      } else {
+        clearConsultationSession();
+        setOtpStep('mobile');
+      }
       return;
     }
+
+    setRequiresOtp(false);
 
     // Function to process encoded ID parameter (legacy)
     const processEncodedId = async (encryptedId) => {
@@ -480,6 +880,13 @@ function App() {
       });
     }
   }, []);
+
+  useEffect(() => {
+    if (!requiresOtp) return;
+    if (otpStep !== 'verified') return;
+    if (!encryptedParams) return;
+    processMultipleEncryptedParams(encryptedParams);
+  }, [requiresOtp, otpStep, encryptedParams]);
 
   // Loading component for decryption process
   const LoadingScreen = () => (
@@ -676,6 +1083,8 @@ function App() {
               <LoadingScreen />
             ) : decryptionError ? (
               <ErrorScreen />
+            ) : requiresOtp && otpStep !== 'verified' ? (
+              otpStep === 'otp' ? renderOtpVerificationScreen() : renderOtpMobileScreen()
             ) : decryptionComplete && isTokenValid ? (
               // Redirect to video consultation after successful decryption
               <Navigate to="/consultation" replace />

@@ -1,5 +1,5 @@
 // Wrap all requires in try-catch to prevent startup failures
-let express, cors, path, crypto, sql;
+let express, cors, path, crypto, sql, axios;
 let sqlInjectionDetectionMiddleware, initializeLogger;
 let SQLInjectionDetector, SQLInjectionLogger;
 
@@ -9,6 +9,7 @@ try {
   path = require('path');
   crypto = require('crypto');
   sql = require('mssql');
+  axios = require('axios');
 } catch (err) {
   console.error('❌ CRITICAL: Failed to load core dependencies:', err.message);
   console.error('Stack:', err.stack);
@@ -532,6 +533,286 @@ const formatTimeForSQL = (timeString) => {
   }
 };
 
+// External service configuration (kept in environment variables for security)
+const CRM_CONFIG = {
+  tokenUrl: process.env.CRM_TOKEN_URL || 'https://unfydcrm.kauveryhospital.com/DoctorsAPI_DEV/Tokens',
+  teleMobileUrl: process.env.CRM_TELE_MOBILE_URL || 'https://unfydcrm.kauveryhospital.com/DoctorsAPI_DEV/TeleMobile',
+  username: process.env.CRM_USERNAME || '',
+  password: process.env.CRM_PASSWORD || '',
+  grantType: process.env.CRM_GRANT_TYPE || 'password',
+  requestTimeoutMs: parseInt(process.env.CRM_REQUEST_TIMEOUT_MS, 10) || 7000
+};
+
+const OTP_SECURITY_CONFIG = {
+  otpLength: parseInt(process.env.CONSULTATION_OTP_LENGTH, 10) || 6,
+  otpTtlMs: parseInt(process.env.CONSULTATION_OTP_TTL_MS, 10) || 5 * 60 * 1000,
+  resendCooldownMs: parseInt(process.env.CONSULTATION_OTP_RESEND_COOLDOWN_MS, 10) || 60 * 1000,
+  maxAttempts: parseInt(process.env.CONSULTATION_OTP_MAX_ATTEMPTS, 10) || 5,
+  accessTokenTtlMs: parseInt(process.env.CONSULTATION_ACCESS_TOKEN_TTL_MS, 10) || 15 * 60 * 1000,
+  smsUrl: process.env.OTP_SMS_URL || '',
+  smsCustomerId: process.env.OTP_SMS_CUSTOMER_ID || '',
+  smsSourceAddress: process.env.OTP_SMS_SOURCE_ADDRESS || '',
+  smsTemplateId: process.env.OTP_SMS_TEMPLATE_ID || '',
+  smsEntityId: process.env.OTP_SMS_ENTITY_ID || '',
+  smsMessageType: process.env.OTP_SMS_MESSAGE_TYPE || 'SERVICE_IMPLICIT',
+  smsBasicAuth: process.env.OTP_SMS_BASIC_AUTH || '',
+  smsEnableUrlShortener: (process.env.OTP_SMS_ENABLE_SHORT_URL || 'false').toLowerCase() === 'true',
+  smsMessage: process.env.OTP_SMS_MESSAGE || 'Welcome! Use OTP {#var#} to verify your identity and join your teleconsultation session. This code is valid only for a short time. - Kauvery Hospital'
+};
+
+const CONSULTATION_ACCESS_ENABLED = (process.env.ENABLE_CONSULTATION_ACCESS || 'true').toLowerCase() === 'true';
+
+let crmTokenCache = {
+  token: null,
+  expiresAt: 0
+};
+
+const otpSessionStore = new Map();
+const consultationAccessStore = new Map();
+const mobileRegex = /^[0-9]{8,15}$/;
+
+const SESSION_CLEANUP = setInterval(() => {
+  const now = Date.now();
+  otpSessionStore.forEach((session, key) => {
+    if (session.expiresAt <= now) {
+      otpSessionStore.delete(key);
+    }
+  });
+
+  consultationAccessStore.forEach((session, key) => {
+    if (session.expiresAt <= now) {
+      consultationAccessStore.delete(key);
+    }
+  });
+}, 60 * 1000);
+
+if (typeof SESSION_CLEANUP.unref === 'function') {
+  SESSION_CLEANUP.unref();
+}
+
+function hashValue(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function maskMobileNumber(number) {
+  if (!number || number.length < 4) return '****';
+  const visible = number.slice(-4);
+  return `${'*'.repeat(Math.max(0, number.length - 4))}${visible}`;
+}
+
+function generateOtpCode(length = 6) {
+  const digits = '0123456789';
+  let otp = '';
+  for (let i = 0; i < length; i += 1) {
+    const idx = Math.floor(Math.random() * digits.length);
+    otp += digits[idx];
+  }
+  return otp;
+}
+
+async function getCrmAccessToken(forceRefresh = false) {
+  if (!CRM_CONFIG.username || !CRM_CONFIG.password) {
+    throw new Error('CRM credentials are not configured');
+  }
+
+  if (!forceRefresh && crmTokenCache.token && crmTokenCache.expiresAt > Date.now() + 60000) {
+    return crmTokenCache.token;
+  }
+
+  const body = new URLSearchParams({
+    UserName: CRM_CONFIG.username,
+    Password: CRM_CONFIG.password,
+    grant_type: CRM_CONFIG.grantType
+  });
+
+  const response = await axios.post(CRM_CONFIG.tokenUrl, body.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: CRM_CONFIG.requestTimeoutMs
+  });
+
+  const expiresInSeconds = Number(response.data?.expires_in) || 600;
+  crmTokenCache = {
+    token: response.data?.access_token,
+    expiresAt: Date.now() + (expiresInSeconds * 1000)
+  };
+
+  if (!crmTokenCache.token) {
+    throw new Error('CRM token response did not include access_token');
+  }
+
+  return crmTokenCache.token;
+}
+
+async function verifyAppointmentMobile(appointmentNumber, mobile) {
+  if (!CRM_CONFIG.teleMobileUrl) {
+    throw new Error('TeleMobile URL is not configured');
+  }
+
+  const payload = { Appno: appointmentNumber, Mobno: mobile };
+
+  try {
+    const token = await getCrmAccessToken();
+    const response = await axios.post(CRM_CONFIG.teleMobileUrl, payload, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: CRM_CONFIG.requestTimeoutMs
+    });
+
+    return response.data?.Status === 'Success';
+  } catch (error) {
+    if (error.response?.status === 401) {
+      const refreshedToken = await getCrmAccessToken(true);
+      const retryResponse = await axios.post(CRM_CONFIG.teleMobileUrl, payload, {
+        headers: {
+          Authorization: `Bearer ${refreshedToken}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: CRM_CONFIG.requestTimeoutMs
+      });
+      return retryResponse.data?.Status === 'Success';
+    }
+
+    console.error('❌ TeleMobile verification failed:', error.message);
+    throw new Error('Failed to verify mobile number');
+  }
+}
+
+async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
+  if (!OTP_SECURITY_CONFIG.smsUrl || !OTP_SECURITY_CONFIG.smsBasicAuth) {
+    console.warn('⚠️ OTP SMS configuration missing. OTP code:', otpCode);
+    return { delivered: false, simulated: true };
+  }
+
+  const message = OTP_SECURITY_CONFIG.smsMessage.replace('{#var#}', otpCode).replace('{{OTP}}', otpCode);
+  const payload = {
+    customerId: OTP_SECURITY_CONFIG.smsCustomerId,
+    destinationAddress: mobile,
+    message,
+    sourceAddress: OTP_SECURITY_CONFIG.smsSourceAddress,
+    messageType: OTP_SECURITY_CONFIG.smsMessageType,
+    dltTemplateId: OTP_SECURITY_CONFIG.smsTemplateId,
+    entityId: OTP_SECURITY_CONFIG.smsEntityId,
+    otp: true,
+    urlShortenerParams: OTP_SECURITY_CONFIG.smsEnableUrlShortener ? {
+      isEnabled: true,
+      isUniqueUrl: true
+    } : undefined,
+    metaData: {
+      appointmentNumber,
+      sentAt: new Date().toISOString()
+    }
+  };
+
+  try {
+    const response = await axios.post(OTP_SECURITY_CONFIG.smsUrl, payload, {
+      headers: {
+        Authorization: `Basic ${OTP_SECURITY_CONFIG.smsBasicAuth}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: CRM_CONFIG.requestTimeoutMs
+    });
+
+    return { delivered: true, providerResponse: response.data };
+  } catch (error) {
+    console.error('❌ OTP SMS send failed:', error.message);
+    throw new Error('Failed to send OTP');
+  }
+}
+
+function validateMobileNumber(mobile) {
+  return mobileRegex.test(String(mobile || '').trim());
+}
+
+function extractAppointmentNumberFromParams(params = {}) {
+  const encryptedCandidates = ['a', 'app_no_enc'];
+  for (const key of encryptedCandidates) {
+    if (params[key]) {
+      try {
+        return decrypt(config.decryptionKey, params[key]);
+      } catch (error) {
+        console.error(`❌ Failed to decrypt ${key}:`, error.message);
+      }
+    }
+  }
+
+  const plainCandidates = ['app_no', 'appointment', 'appointmentNumber', 'appointment_no'];
+  for (const key of plainCandidates) {
+    if (params[key]) {
+      return params[key];
+    }
+  }
+
+  return null;
+}
+
+function computeLinkHash(params = {}) {
+  try {
+    return hashValue(JSON.stringify(params));
+  } catch (error) {
+    console.error('❌ Failed to compute link hash:', error.message);
+    return null;
+  }
+}
+
+function extractConsultationToken(req) {
+  const headerToken = req.headers['x-consultation-token'];
+  if (headerToken) return headerToken;
+  const authHeader = req.headers.authorization || '';
+  if (authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+  return null;
+}
+
+function requireConsultationAccess(req, res, next) {
+  if (!CONSULTATION_ACCESS_ENABLED) {
+    return next();
+  }
+
+  const token = extractConsultationToken(req);
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      error: 'consultation_token_required',
+      message: 'Consultation access token is required'
+    });
+  }
+
+  const session = consultationAccessStore.get(token);
+  if (!session) {
+    return res.status(401).json({
+      success: false,
+      error: 'consultation_token_invalid',
+      message: 'Consultation access token is invalid or expired'
+    });
+  }
+
+  if (session.expiresAt <= Date.now()) {
+    consultationAccessStore.delete(token);
+    return res.status(401).json({
+      success: false,
+      error: 'consultation_token_expired',
+      message: 'Consultation access token is invalid or expired'
+    });
+  }
+
+  const linkHash = req.headers['x-consultation-link'];
+  if (session.linkHash && linkHash !== session.linkHash) {
+    return res.status(403).json({
+      success: false,
+      error: 'consultation_link_mismatch',
+      message: 'Encrypted link verification failed'
+    });
+  }
+
+  req.consultationSession = session;
+  return next();
+}
+
+
+
 // Enhanced appointment storage with MIS tracking
 async function storeAppointment(appointmentData) {
   try {
@@ -965,8 +1246,196 @@ function decryptRateLimit(req, res, next) {
   next();
 }
 
+// Consultation OTP pre-check: validates mobile against appointment and sends OTP
+app.post('/api/consultation/precheck', async (req, res) => {
+  try {
+    const { mobile, params } = req.body || {};
+    if (!params || typeof params !== 'object') {
+      return res.status(400).json({
+        success: false,
+        error: 'invalid_payload',
+        message: 'Encrypted parameters are required'
+      });
+    }
+
+    if (!validateMobileNumber(mobile)) {
+      return res.status(400).json({
+        success: false,
+        error: 'invalid_mobile',
+        message: 'Please provide a valid mobile number'
+      });
+    }
+
+    const appointmentNumber = extractAppointmentNumberFromParams(params);
+    if (!appointmentNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'invalid_link',
+        message: 'Unable to locate appointment number from link'
+      });
+    }
+
+    const linkHash = computeLinkHash(params);
+    if (!linkHash) {
+      return res.status(400).json({
+        success: false,
+        error: 'invalid_link_hash',
+        message: 'Unable to validate encrypted link'
+      });
+    }
+
+    const normalizedMobile = String(mobile).trim();
+    const isValid = await verifyAppointmentMobile(appointmentNumber, normalizedMobile);
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        error: 'mobile_mismatch',
+        message: 'The entered mobile number does not match this appointment'
+      });
+    }
+
+    const now = Date.now();
+    const mobileHash = hashValue(normalizedMobile);
+
+    const recentSession = Array.from(otpSessionStore.values()).find(
+      session => session.mobileHash === mobileHash && now - session.createdAt < OTP_SECURITY_CONFIG.resendCooldownMs
+    );
+
+    if (recentSession) {
+      return res.status(429).json({
+        success: false,
+        error: 'otp_throttled',
+        message: 'OTP already sent. Please wait before requesting again.'
+      });
+    }
+
+    const otpCode = generateOtpCode(OTP_SECURITY_CONFIG.otpLength);
+    const otpSalt = crypto.randomBytes(16).toString('hex');
+    const otpHash = hashValue(`${otpSalt}:${otpCode}`);
+    const precheckId = crypto.randomUUID();
+    const expiresAt = now + OTP_SECURITY_CONFIG.otpTtlMs;
+
+    otpSessionStore.set(precheckId, {
+      appointmentNumber,
+      mobileHash,
+      maskedMobile: maskMobileNumber(normalizedMobile),
+      otpHash,
+      otpSalt,
+      linkHash,
+      attempts: 0,
+      createdAt: now,
+      expiresAt
+    });
+
+    try {
+      await sendOtpSms({ mobile: normalizedMobile, otpCode, appointmentNumber });
+    } catch (error) {
+      otpSessionStore.delete(precheckId);
+      throw error;
+    }
+
+    console.log(`[OTP] Sent verification code for appointment ${appointmentNumber}`);
+
+    return res.json({
+      success: true,
+      precheckId,
+      maskedMobile: maskMobileNumber(normalizedMobile),
+      linkHash,
+      expiresIn: OTP_SECURITY_CONFIG.otpTtlMs,
+      appointmentHint: appointmentNumber ? `****${String(appointmentNumber).slice(-4)}` : null
+    });
+  } catch (error) {
+    console.error('❌ Consultation precheck failed:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: 'precheck_failed',
+      message: NODE_ENV === 'development' ? error.message : 'Unable to initiate verification'
+    });
+  }
+});
+
+// Consultation OTP verification endpoint
+app.post('/api/consultation/verify-otp', async (req, res) => {
+  try {
+    const { precheckId, otp } = req.body || {};
+    if (!precheckId || !otp) {
+      return res.status(400).json({
+        success: false,
+        error: 'invalid_payload',
+        message: 'precheckId and otp are required'
+      });
+    }
+
+    const session = otpSessionStore.get(precheckId);
+    if (!session) {
+      return res.status(400).json({
+        success: false,
+        error: 'otp_expired',
+        message: 'OTP has expired. Please restart verification.'
+      });
+    }
+
+    if (session.expiresAt <= Date.now()) {
+      otpSessionStore.delete(precheckId);
+      return res.status(400).json({
+        success: false,
+        error: 'otp_expired',
+        message: 'OTP has expired. Please restart verification.'
+      });
+    }
+
+    session.attempts += 1;
+    if (session.attempts > OTP_SECURITY_CONFIG.maxAttempts) {
+      otpSessionStore.delete(precheckId);
+      return res.status(429).json({
+        success: false,
+        error: 'otp_attempts_exceeded',
+        message: 'Too many invalid attempts. Please request a new OTP.'
+      });
+    }
+
+    const hashedInput = hashValue(`${session.otpSalt}:${otp}`);
+    if (hashedInput !== session.otpHash) {
+      return res.status(400).json({
+        success: false,
+        error: 'otp_invalid',
+        message: 'Invalid OTP. Please try again.'
+      });
+    }
+
+    otpSessionStore.delete(precheckId);
+
+    const accessToken = crypto.randomBytes(48).toString('hex');
+    const expiresAt = Date.now() + OTP_SECURITY_CONFIG.accessTokenTtlMs;
+
+    consultationAccessStore.set(accessToken, {
+      appointmentNumber: session.appointmentNumber,
+      mobileHash: session.mobileHash,
+      linkHash: session.linkHash,
+      expiresAt
+    });
+
+    console.log(`[OTP] Verified appointment ${session.appointmentNumber}`);
+
+    return res.json({
+      success: true,
+      token: accessToken,
+      expiresIn: OTP_SECURITY_CONFIG.accessTokenTtlMs,
+      maskedMobile: session.maskedMobile,
+      appointmentHint: session.appointmentNumber ? `****${String(session.appointmentNumber).slice(-4)}` : null
+    });
+  } catch (error) {
+    console.error('❌ Consultation OTP verification failed:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: 'otp_verification_failed',
+      message: NODE_ENV === 'development' ? error.message : 'Unable to verify OTP'
+    });
+  }
+});
+
 // Batch decryption endpoint - Decrypt multiple parameters at once
-app.post('/api/decrypt/batch', decryptRateLimit, async (req, res) => {
+async function batchDecryptHandler(req, res) {
   try {
     const { texts } = req.body;
     
@@ -1056,7 +1525,7 @@ app.post('/api/decrypt/batch', decryptRateLimit, async (req, res) => {
     const clientIp = getClientIp(req);
     console.log(`[SECURITY] Batch decrypt endpoint accessed by IP: ${clientIp} at ${new Date().toISOString()}, items: ${texts.length}`);
 
-    res.json({
+    return res.json({
       success: true,
       results,
       errors: Object.keys(errors).length > 0 ? errors : undefined,
@@ -1065,17 +1534,20 @@ app.post('/api/decrypt/batch', decryptRateLimit, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Batch decryption failed:', error.message);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       success: false, 
       error: 'Batch decryption failed', 
       message: NODE_ENV === 'development' ? error.message : 'Invalid encrypted data',
       timestamp: new Date().toISOString()
     });
   }
-});
+}
+
+app.post('/api/decrypt/batch', decryptRateLimit, batchDecryptHandler);
+app.post('/api/consultation/decrypt/batch', requireConsultationAccess, decryptRateLimit, batchDecryptHandler);
 
 // Main decryption endpoint - Enhanced with security (single item)
-app.post('/api/decrypt', decryptRateLimit, (req, res) => {
+function singleDecryptHandler(req, res) {
   try {
     const { text } = req.body;
     
@@ -1133,7 +1605,7 @@ app.post('/api/decrypt', decryptRateLimit, (req, res) => {
     
     // Return sanitized and masked response
     // Note: Client should only receive what it needs, not full decrypted data
-    res.json({ 
+    return res.json({ 
       success: true, 
       decryptedText: isJSON ? JSON.stringify(finalResponse) : finalResponse, // Return JSON string if object, plain string if text
       timestamp: new Date().toISOString()
@@ -1146,14 +1618,17 @@ app.post('/api/decrypt', decryptRateLimit, (req, res) => {
   } catch (error) {
     console.error('❌ Decryption failed:', error.message);
     // Don't expose error details in production
-    res.status(500).json({ 
+    return res.status(500).json({ 
       success: false, 
       error: 'Decryption failed', 
       message: NODE_ENV === 'development' ? error.message : 'Invalid encrypted data',
       timestamp: new Date().toISOString()
     });
   }
-});
+}
+
+app.post('/api/decrypt', decryptRateLimit, singleDecryptHandler);
+app.post('/api/consultation/decrypt', requireConsultationAccess, decryptRateLimit, singleDecryptHandler);
 
 // Add debugging to the /api/appointments endpoint
 app.post('/api/appointments', async (req, res) => {
