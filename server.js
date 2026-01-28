@@ -1,5 +1,5 @@
 // Wrap all requires in try-catch to prevent startup failures
-let express, cors, path, crypto, sql, axios;
+let express, cors, path, crypto, sql, axios, fs;
 let sqlInjectionDetectionMiddleware, initializeLogger;
 let SQLInjectionDetector, SQLInjectionLogger;
 
@@ -10,6 +10,7 @@ try {
   crypto = require('crypto');
   sql = require('mssql');
   axios = require('axios');
+  fs = require('fs');
 } catch (err) {
   console.error('❌ CRITICAL: Failed to load core dependencies:', err.message);
   console.error('Stack:', err.stack);
@@ -28,6 +29,27 @@ try {
   // Exit this module initialization but export minimal app
   return;
 }
+
+function writeCrashLog(message) {
+  try {
+    const logPath = path ? path.join(__dirname, 'iisnode_crash.log') : 'iisnode_crash.log';
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${message}\n`);
+  } catch (logErr) {
+    console.error('Failed to write crash log:', logErr.message);
+  }
+}
+
+process.on('uncaughtException', (err) => {
+  writeCrashLog(`UNCAUGHT EXCEPTION: ${err.stack || err.message}`);
+  throw err;
+});
+
+process.on('unhandledRejection', (reason) => {
+  writeCrashLog(`UNHANDLED REJECTION: ${reason && reason.stack ? reason.stack : reason}`);
+  throw reason instanceof Error ? reason : new Error(String(reason));
+});
+
+writeCrashLog('Server boot starting...');
 
 // Try to load optional SQL injection modules (don't fail if missing)
 try {
