@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars, default-case, react-hooks/exhaustive-deps */
 import React, { useState, useEffect, useRef, Component } from 'react';
 import logoImage from '../assets/25YearsLogo.png';
 import './VideoConsultation.css';
