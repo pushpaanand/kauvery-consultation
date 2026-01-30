@@ -1,4 +1,5 @@
 // Wrap all requires in try-catch to prevent startup failures
+require('dotenv').config();
 let express, cors, path, crypto, sql, axios, fs;
 let sqlInjectionDetectionMiddleware, initializeLogger;
 let SQLInjectionDetector, SQLInjectionLogger;
@@ -436,7 +437,7 @@ app.use(sqlInjectionDetectionMiddleware);
 
 // Configuration
 const config = {
-  decryptionKey: process.env.DECRYPTION_KEY || 'sfrwYIgtcgsRdwjo',
+  decryptionKey: process.env.DECRYPTION_KEY || process.env.REACT_APP_DECRYPTION_KEY || 'sfrwYIgtcgsRdwjo',
   environment: NODE_ENV
 };
 
@@ -2055,15 +2056,14 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: 'Internal server error', details: NODE_ENV === 'development' ? err.message : undefined });
 });
 
-// Azure App Service / iisnode: Do NOT call app.listen() - iisnode handles the HTTP server
-// For local development, we can call app.listen() if not running under iisnode
+// Azure App Service / iisnode: We MUST call app.listen() - iisnode provides a named pipe via process.env.PORT
 try {
-  const isRunningUnderIISNode = process.env.IISNODE_VERSION || process.env.WEBSITE_SITE_NAME; // Azure sets these
+  const isRunningUnderIISNode = !!(process.env.IISNODE_VERSION || process.env.WEBSITE_SITE_NAME); // Azure sets these
 
   // Connect to database (non-blocking for Azure deployment)
   (async function connectDatabase() {
     try {
-  await connectDB();
+      await connectDB();
       console.log('✅ Database connection established');
     } catch (error) {
       console.error('⚠️ Database connection failed (server will continue):', error.message);
@@ -2071,37 +2071,25 @@ try {
     }
   })();
 
-  // Only call app.listen() if NOT running under iisnode (local development)
-  if (!isRunningUnderIISNode) {
+  // Start the server
+  // On Azure, PORT will be a named pipe (e.g. \\.\pipe\...)
   app.listen(PORT, () => {
+    if (!isRunningUnderIISNode) {
       console.log(`🚀 Server listening on port ${PORT} (local development)`);
-      console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected'}`);
-    });
-  } else {
-    // Running under iisnode (Azure App Service)
-    console.log('🚀 Server ready for iisnode (Azure App Service)');
-    console.log(`📊 Database: ${pool ? 'Connected' : 'Not connected (connecting in background...)'}`);
-  }
+    } else {
+      console.log(`🚀 Server listening on iisnode pipe (Azure App Service)`);
+    }
+  });
+
 } catch (error) {
   console.error('❌ Error during server initialization:', error);
   console.error('Stack:', error.stack);
   // Don't exit - let iisnode handle it
 }
 
-// Ensure app is always exported, even if there were errors
+// Ensure app is always exported
 try {
-module.exports = app;
+  module.exports = app;
 } catch (error) {
   console.error('❌ Failed to export app:', error);
-  // Create minimal fallback app
-  const express = require('express');
-  const fallbackApp = express();
-  fallbackApp.get('*', (req, res) => {
-    res.status(500).json({ 
-      error: 'Server initialization error', 
-      message: error.message,
-      path: req.path 
-    });
-  });
-  module.exports = fallbackApp;
 }
