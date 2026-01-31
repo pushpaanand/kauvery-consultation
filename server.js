@@ -549,8 +549,8 @@ const formatTimeForSQL = (timeString) => {
 const CRM_CONFIG = {
   tokenUrl: process.env.CRM_TOKEN_URL || 'https://unfydcrm.kauveryhospital.com/DoctorsAPI_DEV/Tokens',
   teleMobileUrl: process.env.CRM_TELE_MOBILE_URL || 'https://unfydcrm.kauveryhospital.com/DoctorsAPI_DEV/TeleMobile',
-  username: process.env.CRM_USERNAME || '',
-  password: process.env.CRM_PASSWORD || '',
+  username: process.env.OTP_SMS_CUSTOMER_ID || '',
+  password: process.env.OTP_SMS_PASSWORD || '',
   grantType: process.env.CRM_GRANT_TYPE || 'password',
   requestTimeoutMs: parseInt(process.env.CRM_REQUEST_TIMEOUT_MS, 10) || 7000
 };
