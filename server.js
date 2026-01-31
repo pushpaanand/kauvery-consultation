@@ -549,8 +549,8 @@ const formatTimeForSQL = (timeString) => {
 const CRM_CONFIG = {
   tokenUrl: process.env.CRM_TOKEN_URL || 'https://unfydcrm.kauveryhospital.com/DoctorsAPI_DEV/Tokens',
   teleMobileUrl: process.env.CRM_TELE_MOBILE_URL || 'https://unfydcrm.kauveryhospital.com/DoctorsAPI_DEV/TeleMobile',
-  username: process.env.OTP_SMS_CUSTOMER_ID || '',
-  password: process.env.OTP_SMS_PASSWORD || '',
+  username: process.env.CRM_USERNAME || 'Kauvery',
+  password: process.env.CRM_PASSWORD || 'Kmc@123',
   grantType: process.env.CRM_GRANT_TYPE || 'password',
   requestTimeoutMs: parseInt(process.env.CRM_REQUEST_TIMEOUT_MS, 10) || 7000
 };
@@ -561,11 +561,13 @@ const OTP_SECURITY_CONFIG = {
   resendCooldownMs: parseInt(process.env.CONSULTATION_OTP_RESEND_COOLDOWN_MS, 10) || 60 * 1000,
   maxAttempts: parseInt(process.env.CONSULTATION_OTP_MAX_ATTEMPTS, 10) || 5,
   accessTokenTtlMs: parseInt(process.env.CONSULTATION_ACCESS_TOKEN_TTL_MS, 10) || 15 * 60 * 1000,
-  smsUrl: process.env.OTP_SMS_URL || '',
-  smsCustomerId: process.env.OTP_SMS_CUSTOMER_ID || '',
-  smsSourceAddress: process.env.OTP_SMS_SOURCE_ADDRESS || '',
-  smsTemplateId: process.env.OTP_SMS_TEMPLATE_ID || '',
-  smsEntityId: process.env.OTP_SMS_ENTITY_ID || '',
+  smsUrl: process.env.OTP_SMS_URL || 'https://iqsms.airtel.in/api/v1/send-sms',
+  smsCustomerId: process.env.OTP_SMS_CUSTOMER_ID || 'SRI_KAUVER_cm361K07zDZnE0UitOhY',
+  smsUser: process.env.OTP_SMS_USER || 'SRI_KAUVER_cm361K07zDZnE0UitOhY', 
+  smsPassword: process.env.OTP_SMS_PASSWORD || 'Sri@222#', 
+  smsSourceAddress: process.env.OTP_SMS_SOURCE_ADDRESS || 'KAUVRY',
+  smsTemplateId: process.env.OTP_SMS_TEMPLATE_ID || '1707176742918189539',
+  smsEntityId: process.env.OTP_SMS_ENTITY_ID || '1701159160747787217',
   smsMessageType: process.env.OTP_SMS_MESSAGE_TYPE || 'SERVICE_IMPLICIT',
   smsBasicAuth: process.env.OTP_SMS_BASIC_AUTH || '',
   smsEnableUrlShortener: (process.env.OTP_SMS_ENABLE_SHORT_URL || 'false').toLowerCase() === 'true',
@@ -624,7 +626,7 @@ function generateOtpCode(length = 6) {
 
 async function getCrmAccessToken(forceRefresh = false) {
   if (!CRM_CONFIG.username || !CRM_CONFIG.password) {
-    throw new Error('CRM credentials are not configured');
+    throw new Error('CRM credentials (CRM_USERNAME/CRM_PASSWORD) are not configured in Azure Application Settings');
   }
 
   if (!forceRefresh && crmTokenCache.token && crmTokenCache.expiresAt > Date.now() + 60000) {
@@ -637,22 +639,31 @@ async function getCrmAccessToken(forceRefresh = false) {
     grant_type: CRM_CONFIG.grantType
   });
 
-  const response = await axios.post(CRM_CONFIG.tokenUrl, body.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    timeout: CRM_CONFIG.requestTimeoutMs
-  });
+  try {
+    const response = await axios.post(CRM_CONFIG.tokenUrl, body.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: CRM_CONFIG.requestTimeoutMs
+    });
 
-  const expiresInSeconds = Number(response.data?.expires_in) || 600;
-  crmTokenCache = {
-    token: response.data?.access_token,
-    expiresAt: Date.now() + (expiresInSeconds * 1000)
-  };
+    const expiresInSeconds = Number(response.data?.expires_in) || 600;
+    crmTokenCache = {
+      token: response.data?.access_token,
+      expiresAt: Date.now() + (expiresInSeconds * 1000)
+    };
 
-  if (!crmTokenCache.token) {
-    throw new Error('CRM token response did not include access_token');
+    if (!crmTokenCache.token) {
+      throw new Error('CRM token response did not include access_token');
+    }
+
+    return crmTokenCache.token;
+  } catch (error) {
+    console.error('❌ CRM Token Acquisition Failed:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      url: CRM_CONFIG.tokenUrl
+    });
+    throw new Error(`CRM Authentication Failed: ${error.response?.data?.error_description || error.message}`);
   }
-
-  return crmTokenCache.token;
 }
 
 async function verifyAppointmentMobile(appointmentNumber, mobile) {
@@ -660,10 +671,17 @@ async function verifyAppointmentMobile(appointmentNumber, mobile) {
     throw new Error('TeleMobile URL is not configured');
   }
 
-  const payload = { Appno: appointmentNumber, Mobno: mobile };
+  // Ensure appointment number is a string and mobile is 10 digits
+  const cleanAppNo = String(appointmentNumber || '').trim();
+  let cleanMobile = String(mobile || '').replace(/\D/g, '');
+  if (cleanMobile.length > 10) cleanMobile = cleanMobile.slice(-10);
+
+  const payload = { Appno: cleanAppNo, Mobno: cleanMobile };
 
   try {
     const token = await getCrmAccessToken();
+    console.log(`[CRM] Verifying: Appno=${cleanAppNo}, Mobno=${cleanMobile}`);
+    
     const response = await axios.post(CRM_CONFIG.teleMobileUrl, payload, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -672,8 +690,18 @@ async function verifyAppointmentMobile(appointmentNumber, mobile) {
       timeout: CRM_CONFIG.requestTimeoutMs
     });
 
+    console.log('[CRM] Response Status:', response.data?.Status);
     return response.data?.Status === 'Success';
   } catch (error) {
+    // Log the actual error response from CRM to debug the 400 error
+    if (error.response) {
+      console.error('❌ CRM TeleMobile API Error:', {
+        status: error.response.status,
+        data: error.response.data,
+        sentPayload: payload
+      });
+    }
+
     if (error.response?.status === 401) {
       const refreshedToken = await getCrmAccessToken(true);
       const retryResponse = await axios.post(CRM_CONFIG.teleMobileUrl, payload, {
@@ -687,49 +715,64 @@ async function verifyAppointmentMobile(appointmentNumber, mobile) {
     }
 
     console.error('❌ TeleMobile verification failed:', error.message);
-    throw new Error('Failed to verify mobile number');
+    throw new Error(`CRM verification failed: ${error.response?.data?.Message || error.message}`);
   }
 }
 
 async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
-  if (!OTP_SECURITY_CONFIG.smsUrl || !OTP_SECURITY_CONFIG.smsBasicAuth) {
-    console.warn('⚠️ OTP SMS configuration missing. OTP code:', otpCode);
-    return { delivered: false, simulated: true };
-  }
+  // 1. HARDCODED AIRTEL CREDENTIALS (Matches your working snippet)
+  const username = 'SRI_KAUVER_cm361K07zDZnE0UitOhY';
+  const password = 'Sri@222#';
+  const customerId = 'SRI_KAUVER_cm361K07zDZnE0UitOhY';
+  const templateId = '1707176742918189539';
+  const entityId = '1701159160747787217';
 
-  const message = OTP_SECURITY_CONFIG.smsMessage.replace('{#var#}', otpCode).replace('{{OTP}}', otpCode);
+  // 2. GENERATE AUTH HEADER
+  const auth = Buffer.from(`${username}:${password}`).toString('base64');
+  const finalAuth = `Basic ${auth}`;
+
+  // 3. MESSAGE FORMAT (Must match Template ID approval)
+  const message = `Welcome! Use OTP ${otpCode} to verify your identity and join your teleconsultation session. This code is valid only for a short time. - Kauvery Hospital`;
+  
+  // 4. FORMAT MOBILE
+  const formattedMobile = String(mobile).replace(/\D/g, '').slice(-10);
+
   const payload = {
-    customerId: OTP_SECURITY_CONFIG.smsCustomerId,
-    destinationAddress: mobile,
+    customerId: customerId,
+    destinationAddress: formattedMobile, 
     message,
-    sourceAddress: OTP_SECURITY_CONFIG.smsSourceAddress,
-    messageType: OTP_SECURITY_CONFIG.smsMessageType,
-    dltTemplateId: OTP_SECURITY_CONFIG.smsTemplateId,
-    entityId: OTP_SECURITY_CONFIG.smsEntityId,
-    otp: true,
-    urlShortenerParams: OTP_SECURITY_CONFIG.smsEnableUrlShortener ? {
-      isEnabled: true,
-      isUniqueUrl: true
-    } : undefined,
-    metaData: {
-      appointmentNumber,
-      sentAt: new Date().toISOString()
-    }
+    sourceAddress: 'KAUVRY',
+    messageType: 'SERVICE_IMPLICIT',
+    dltTemplateId: templateId,
+    entityId: entityId,
   };
 
   try {
-    const response = await axios.post(OTP_SECURITY_CONFIG.smsUrl, payload, {
+    const https = require('https');
+    const agent = new https.Agent({ rejectUnauthorized: false });
+
+    console.log(`[SMS] Sending to: ${formattedMobile}`);
+    console.log(`[SMS] Using Template ID: ${templateId}`);
+    console.log(`[SMS] Generated Auth Header: ${finalAuth}`); // Verify this string matches your working Postman call
+
+    const response = await axios.post('https://iqsms.airtel.in/api/v1/send-sms', payload, {
       headers: {
-        Authorization: `Basic ${OTP_SECURITY_CONFIG.smsBasicAuth}`,
+        'Authorization': finalAuth,
         'Content-Type': 'application/json'
       },
-      timeout: CRM_CONFIG.requestTimeoutMs
+      httpsAgent: agent,
+      timeout: 10000
     });
 
+    console.log(`[SMS] Airtel Response:`, response.data);
     return { delivered: true, providerResponse: response.data };
+
   } catch (error) {
-    console.error('❌ OTP SMS send failed:', error.message);
-    throw new Error('Failed to send OTP');
+    console.error('❌ Airtel 401 Unauthorized - Check Credentials:', {
+      sentAuth: finalAuth,
+      errorResponse: error.response?.data
+    });
+    throw new Error(`Failed to send OTP: ${error.response?.data?.message || error.message}`);
   }
 }
 
@@ -2052,7 +2095,7 @@ try {
   // Connect to database (non-blocking for Azure deployment)
   (async function connectDatabase() {
     try {
-      await connectDB();
+  await connectDB();
       console.log('✅ Database connection established');
     } catch (error) {
       console.error('⚠️ Database connection failed (server will continue):', error.message);
@@ -2075,7 +2118,7 @@ try {
 
 // Ensure app is always exported
 try {
-  module.exports = app;
+module.exports = app;
 } catch (error) {
   console.error('❌ Failed to export app:', error);
 }
