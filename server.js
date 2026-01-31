@@ -16,7 +16,6 @@ try {
   console.error('❌ CRITICAL: Failed to load core dependencies:', err.message);
   console.error('Stack:', err.stack);
   // Don't exit - create a minimal fallback app
-  console.log('⚠️ Creating minimal fallback server due to missing dependencies...');
   const minimalExpress = require('express');
   const minimalApp = minimalExpress();
   minimalApp.get('*', (req, res) => {
@@ -27,30 +26,19 @@ try {
     });
   });
   module.exports = minimalApp;
-  // Exit this module initialization but export minimal app
   return;
 }
 
-function writeCrashLog(message) {
-  try {
-    const logPath = path ? path.join(__dirname, 'iisnode_crash.log') : 'iisnode_crash.log';
-    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${message}\n`);
-  } catch (logErr) {
-    console.error('Failed to write crash log:', logErr.message);
-  }
-}
-
 process.on('uncaughtException', (err) => {
-  writeCrashLog(`UNCAUGHT EXCEPTION: ${err.stack || err.message}`);
-  throw err;
+  console.error(`[${new Date().toISOString()}] UNCAUGHT EXCEPTION: ${err.stack || err.message}`);
+  // Keep the process running if possible or let the host restart it
 });
 
 process.on('unhandledRejection', (reason) => {
-  writeCrashLog(`UNHANDLED REJECTION: ${reason && reason.stack ? reason.stack : reason}`);
-  throw reason instanceof Error ? reason : new Error(String(reason));
+  console.error(`[${new Date().toISOString()}] UNHANDLED REJECTION: ${reason && reason.stack ? reason.stack : reason}`);
 });
 
-writeCrashLog('Server boot starting...');
+console.log('Server boot starting...');
 
 // Try to load optional SQL injection modules (don't fail if missing)
 try {
@@ -2015,7 +2003,7 @@ app.get('/health', (req, res) => {
     status: 'ok', 
     timestamp: new Date().toISOString(),
     environment: NODE_ENV,
-    isIISNode: !!(process.env.IISNODE_VERSION || process.env.WEBSITE_SITE_NAME),
+    isAzure: !!process.env.WEBSITE_SITE_NAME,
     database: pool ? 'connected' : 'not connected'
   });
 });
@@ -2056,9 +2044,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: 'Internal server error', details: NODE_ENV === 'development' ? err.message : undefined });
 });
 
-// Azure App Service / iisnode: We MUST call app.listen() - iisnode provides a named pipe via process.env.PORT
+// Start server and connect to database
 try {
-  const isRunningUnderIISNode = !!(process.env.IISNODE_VERSION || process.env.WEBSITE_SITE_NAME); // Azure sets these
+  const isAzure = !!(process.env.WEBSITE_SITE_NAME); // Azure App Service sets this
 
   // Connect to database (non-blocking for Azure deployment)
   (async function connectDatabase() {
@@ -2067,24 +2055,21 @@ try {
       console.log('✅ Database connection established');
     } catch (error) {
       console.error('⚠️ Database connection failed (server will continue):', error.message);
-      // Don't exit - let the server continue without database for now
     }
   })();
 
   // Start the server
-  // On Azure, PORT will be a named pipe (e.g. \\.\pipe\...)
   app.listen(PORT, () => {
-    if (!isRunningUnderIISNode) {
-      console.log(`🚀 Server listening on port ${PORT} (local development)`);
+    if (isAzure) {
+      console.log(`🚀 Server listening on port ${PORT} (Azure Linux App Service)`);
     } else {
-      console.log(`🚀 Server listening on iisnode pipe (Azure App Service)`);
+      console.log(`🚀 Server listening on port ${PORT} (Local development)`);
     }
   });
 
 } catch (error) {
   console.error('❌ Error during server initialization:', error);
   console.error('Stack:', error.stack);
-  // Don't exit - let iisnode handle it
 }
 
 // Ensure app is always exported
