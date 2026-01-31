@@ -23,6 +23,7 @@ function App() {
   const [otpError, setOtpError] = useState('');
   const [maskedMobile, setMaskedMobile] = useState('');
   const [appointmentHint, setAppointmentHint] = useState('');
+  const [doctorInfo, setDoctorInfo] = useState({ name: '', speciality: '' });
   const [encryptedParams, setEncryptedParams] = useState(null);
   const [linkHash, setLinkHash] = useState('');
 
@@ -49,245 +50,328 @@ function App() {
   const renderOtpMobileScreen = () => (
     <div style={{
       display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      height: '100vh',
-      background: 'white',
-      color: '#962067',
-      fontFamily: "'Poppins', sans-serif",
-      textAlign: 'center',
-      padding: '20px 20px 60px 20px',
-      boxSizing: 'border-box'
+      minHeight: '100vh',
+      background: '#fff9fb',
+      fontFamily: "'Inter', sans-serif",
+      padding: '100px 20px'
     }}>
+      {renderHeader()}
+      
+      {renderDoctorCard()}
+
       <div style={{
         background: 'white',
-        borderRadius: '20px',
+        borderRadius: '30px',
         padding: '40px',
-        maxWidth: '520px',
         width: '100%',
-        boxShadow: '0 8px 25px rgba(150, 32, 103, 0.15)',
-        border: '3px solid #962067',
-        textAlign: 'left'
+        maxWidth: '450px',
+        boxShadow: '0 10px 40px rgba(150, 32, 103, 0.08)',
+        textAlign: 'center'
       }}>
-        <h1 style={{
-          color: '#962067',
-          fontSize: '26px',
-          fontWeight: '700',
-          margin: '0 0 16px 0'
-        }}>
-          Verify your mobile number
-        </h1>
-        <p style={{
-          color: '#58595B',
-          fontSize: '16px',
-          lineHeight: '1.6',
-          margin: '0 0 24px 0'
-        }}>
-          Enter the mobile number registered with Kauvery Hospital
-          {appointmentHint ? ` (appointment ending with ${appointmentHint})` : ''} to receive an OTP.
+        <h2 style={{ color: '#962067', fontSize: '28px', fontWeight: '800', margin: '0 0 15px 0' }}>Identity Verification</h2>
+        <p style={{ color: '#777', fontSize: '14px', lineHeight: '1.5', margin: '0 auto 30px', maxWidth: '320px' }}>
+          To ensure your privacy and security during this consultation, please verify your registered mobile number.
         </p>
-        <form onSubmit={handleSendOtp}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-            Mobile Number
+
+        <form onSubmit={handleSendOtp} style={{ textAlign: 'left' }}>
+          <label style={{ display: 'block', color: '#aaa', fontSize: '11px', fontWeight: '700', marginBottom: '10px', letterSpacing: '0.5px' }}>
+            REGISTERED MOBILE NUMBER
           </label>
-          <input
-            type="tel"
-            value={mobileInput}
-            onChange={(e) => setMobileInput(sanitizeMobileInput(e.target.value))}
-            placeholder="Enter registered mobile number"
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              borderRadius: '12px',
-              border: '2px solid #E5E5EA',
-              fontSize: '16px',
-              marginBottom: '16px',
-              fontFamily: "'Poppins', sans-serif"
-            }}
-          />
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            border: '1px solid #eee', 
+            borderRadius: '12px',
+            padding: '5px 15px',
+            marginBottom: '25px',
+            background: 'white'
+          }}>
+            <span style={{ color: '#962067', fontWeight: '700', fontSize: '16px', marginRight: '10px', borderRight: '1px solid #eee', paddingRight: '10px' }}>+91</span>
+            <input
+              type="tel"
+              value={mobileInput}
+              onChange={(e) => setMobileInput(sanitizeMobileInput(e.target.value))}
+              placeholder="Enter 10-digit number"
+              style={{
+                flex: 1,
+                border: 'none',
+                padding: '12px 0',
+                fontSize: '16px',
+                outline: 'none',
+                color: '#444',
+                fontWeight: '600'
+              }}
+            />
+          </div>
+
           {otpError && (
-            <div style={{ color: '#cc0000', marginBottom: '16px', fontWeight: 600 }}>
+            <div style={{ color: '#e91e63', fontSize: '13px', marginBottom: '15px', textAlign: 'center', fontWeight: '600' }}>
               {otpError}
             </div>
           )}
+
           <button
             type="submit"
-            disabled={otpLoading}
+            disabled={otpLoading || mobileInput.length < 10}
             style={{
               width: '100%',
-              background: otpLoading ? '#C3C3C3' : 'linear-gradient(135deg, #962067, #A23293)',
+              background: (otpLoading || mobileInput.length < 10) ? '#b0b0b0' : '#962067',
               color: 'white',
               border: 'none',
-              padding: '12px 24px',
-              borderRadius: '20px',
-              cursor: otpLoading ? 'not-allowed' : 'pointer',
+              padding: '16px',
+              borderRadius: '12px',
+              cursor: (otpLoading || mobileInput.length < 10) ? 'not-allowed' : 'pointer',
               fontSize: '16px',
-              fontWeight: '600',
-              fontFamily: "'Poppins', sans-serif",
-              transition: 'all 0.3s ease',
-              boxShadow: '0 4px 15px rgba(150, 32, 103, 0.2)'
+              fontWeight: '700',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              transition: 'all 0.3s ease'
             }}
           >
-            {otpLoading ? 'Sending OTP...' : 'Send OTP'}
+            {otpLoading ? 'Processing...' : 'Get Access Code'}
+            {!otpLoading && <span style={{ fontSize: '20px' }}>→</span>}
           </button>
         </form>
+
+        <div style={{ marginTop: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <div style={{ width: '40px', height: '1px', background: '#eee' }}></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#bbb', fontSize: '10px', fontWeight: '700', letterSpacing: '0.5px' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            HIPAA COMPLIANT PROTOCOL
+          </div>
+          <div style={{ width: '40px', height: '1px', background: '#eee' }}></div>
+        </div>
       </div>
-      <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'linear-gradient(135deg, #962067, #A23293)',
-        color: 'white',
-        padding: '12px 20px',
-        textAlign: 'center',
-        fontSize: '13px',
-        fontFamily: "'Poppins', sans-serif",
-        height: '48px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        © 2025 Kauvery Hospital. All rights reserved.
-      </div>
+
+      {renderFooter()}
     </div>
   );
 
   const renderOtpVerificationScreen = () => (
     <div style={{
       display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      height: '100vh',
-      background: 'white',
-      color: '#962067',
-      fontFamily: "'Poppins', sans-serif",
-      textAlign: 'center',
-      padding: '20px 20px 60px 20px',
-      boxSizing: 'border-box'
+      minHeight: '100vh',
+      background: '#fff9fb',
+      fontFamily: "'Inter', sans-serif",
+      padding: '100px 20px'
     }}>
+      {renderHeader()}
+      
+      {renderDoctorCard()}
+
       <div style={{
         background: 'white',
-        borderRadius: '20px',
+        borderRadius: '30px',
         padding: '40px',
-        maxWidth: '520px',
         width: '100%',
-        boxShadow: '0 8px 25px rgba(150, 32, 103, 0.15)',
-        border: '3px solid #962067',
-        textAlign: 'left'
+        maxWidth: '450px',
+        boxShadow: '0 10px 40px rgba(150, 32, 103, 0.08)',
+        textAlign: 'center'
       }}>
-        <h1 style={{
-          color: '#962067',
-          fontSize: '26px',
-          fontWeight: '700',
-          margin: '0 0 16px 0'
-        }}>
-          Enter OTP
-        </h1>
-        <p style={{
-          color: '#58595B',
-          fontSize: '16px',
-          lineHeight: '1.6',
-          margin: '0 0 24px 0'
-        }}>
-          We sent a verification code to <strong>{maskedMobile || 'your mobile number'}</strong>.
-          Please enter the OTP below to continue.
+        <h2 style={{ color: '#962067', fontSize: '28px', fontWeight: '800', margin: '0 0 15px 0' }}>Enter Access Code</h2>
+        <p style={{ color: '#777', fontSize: '14px', lineHeight: '1.5', margin: '0 auto 30px', maxWidth: '350px' }}>
+          Please enter the secure code sent to <strong style={{ color: '#444' }}>+91 {mobileInput}</strong> to join your call. 
+          <span onClick={handleChangeMobile} style={{ color: '#e91e63', fontWeight: '800', fontSize: '11px', marginLeft: '8px', cursor: 'pointer', textDecoration: 'underline' }}>CHANGE NUMBER</span>
         </p>
-        <form onSubmit={handleVerifyOtp}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
-            One-Time Password (OTP)
+
+        <form onSubmit={handleVerifyOtp} style={{ textAlign: 'left' }}>
+          <label style={{ display: 'block', color: '#aaa', fontSize: '11px', fontWeight: '700', marginBottom: '15px', letterSpacing: '0.5px', textAlign: 'center' }}>
+            ONE-TIME PASSWORD
           </label>
-          <input
-            type="tel"
-            value={otpInput}
-            onChange={(e) => setOtpInput(sanitizeMobileInput(e.target.value).slice(0, 6))}
-            placeholder="Enter OTP"
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              borderRadius: '12px',
-              border: '2px solid #E5E5EA',
-              fontSize: '16px',
-              marginBottom: '16px',
-              fontFamily: "'Poppins', sans-serif",
-              letterSpacing: '4px',
-              textAlign: 'center'
-            }}
-          />
+          
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '30px' }}>
+            {[...Array(6)].map((_, i) => (
+              <div key={i} style={{
+                width: '45px',
+                height: '55px',
+                border: '1px solid #f0f0f0',
+                borderRadius: '12px',
+                background: '#fafafa',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '24px',
+                fontWeight: '700',
+                color: '#962067'
+              }}>
+                {otpInput[i] ? otpInput[i] : <div style={{ width: '6px', height: '6px', background: '#ddd', borderRadius: '50%' }}></div>}
+                {otpInput.length === i && <div style={{ width: '2px', height: '24px', background: '#962067', animation: 'blink 1s infinite' }}></div>}
+              </div>
+            ))}
+            <input
+              type="tel"
+              autoFocus
+              value={otpInput}
+              onChange={(e) => setOtpInput(sanitizeMobileInput(e.target.value).slice(0, 6))}
+              style={{
+                position: 'absolute',
+                opacity: 0,
+                width: '1px',
+                height: '1px'
+              }}
+            />
+          </div>
+
           {otpError && (
-            <div style={{ color: '#cc0000', marginBottom: '16px', fontWeight: 600 }}>
+            <div style={{ color: '#e91e63', fontSize: '13px', marginBottom: '15px', textAlign: 'center', fontWeight: '600' }}>
               {otpError}
             </div>
           )}
+
           <button
             type="submit"
-            disabled={otpLoading}
+            disabled={otpLoading || otpInput.length < 4}
             style={{
               width: '100%',
-              background: otpLoading ? '#C3C3C3' : 'linear-gradient(135deg, #962067, #A23293)',
+              background: (otpLoading || otpInput.length < 4) ? '#b0b0b0' : '#962067',
               color: 'white',
               border: 'none',
-              padding: '12px 24px',
-              borderRadius: '20px',
-              cursor: otpLoading ? 'not-allowed' : 'pointer',
+              padding: '16px',
+              borderRadius: '12px',
+              cursor: (otpLoading || otpInput.length < 4) ? 'not-allowed' : 'pointer',
               fontSize: '16px',
-              fontWeight: '600',
-              fontFamily: "'Poppins', sans-serif",
+              fontWeight: '700',
               transition: 'all 0.3s ease',
-              boxShadow: '0 4px 15px rgba(150, 32, 103, 0.2)',
-              marginBottom: '12px'
+              marginBottom: '20px'
             }}
           >
-            {otpLoading ? 'Verifying...' : 'Verify & Continue'}
+            {otpLoading ? 'Verifying...' : 'Join Consultation Room'}
           </button>
         </form>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={handleResendOtp}
-            disabled={otpLoading}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#962067',
-              fontWeight: 600,
-              cursor: otpLoading ? 'not-allowed' : 'pointer'
-            }}
-          >
-            Resend OTP
-          </button>
-          <button
-            type="button"
-            onClick={handleChangeMobile}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#58595B',
-              cursor: 'pointer'
-            }}
-          >
-            Change mobile number
-          </button>
+
+        <div style={{ color: '#bbb', fontSize: '11px', fontWeight: '700' }}>
+          RESEND CODE IN <span style={{ color: '#962067' }}>15S</span>
+        </div>
+
+        <div style={{ marginTop: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <div style={{ width: '40px', height: '1px', background: '#eee' }}></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#bbb', fontSize: '10px', fontWeight: '700', letterSpacing: '0.5px' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            HIPAA COMPLIANT PROTOCOL
+          </div>
+          <div style={{ width: '40px', height: '1px', background: '#eee' }}></div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+      `}</style>
+      
+      {renderFooter()}
+    </div>
+  );
+
+  const renderVerifiedScreen = () => (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '100vh',
+      background: '#fff9fb',
+      fontFamily: "'Inter', sans-serif",
+      padding: '100px 20px'
+    }}>
+      {renderHeader()}
+      
+      {renderDoctorCard()}
+
       <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'linear-gradient(135deg, #962067, #A23293)',
-        color: 'white',
-        padding: '12px 20px',
-        textAlign: 'center',
-        fontSize: '13px',
-        fontFamily: "'Poppins', sans-serif",
-        height: '48px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
+        background: 'white',
+        borderRadius: '30px',
+        padding: '50px 40px',
+        width: '100%',
+        maxWidth: '450px',
+        boxShadow: '0 10px 40px rgba(150, 32, 103, 0.08)',
+        textAlign: 'center'
       }}>
-        © 2025 Kauvery Hospital. All rights reserved.
+        <div style={{
+          width: '100px',
+          height: '100px',
+          background: 'linear-gradient(135deg, #ff9800, #f44336)',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto 30px',
+          boxShadow: '0 10px 20px rgba(255, 152, 0, 0.3)'
+        }}>
+          <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </div>
+
+        <h2 style={{ color: '#962067', fontSize: '32px', fontWeight: '800', margin: '0 0 15px 0' }}>Verified!</h2>
+        <p style={{ color: '#777', fontSize: '15px', lineHeight: '1.5', margin: '0 auto 40px', maxWidth: '300px' }}>
+          Thank you for verifying. Your <span style={{ color: '#e91e63', fontWeight: '700' }}>Secure Consultation</span> is starting now.
+        </p>
+
+        <div style={{
+          background: '#fcf8fa',
+          borderRadius: '15px',
+          padding: '20px',
+          width: '100%',
+          boxSizing: 'border-box',
+          marginBottom: '30px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '15px' }}>
+            <div style={{ width: '8px', height: '8px', background: '#e91e63', borderRadius: '50%', animation: 'pulse 1.5s infinite' }}></div>
+            <div style={{ color: '#962067', fontSize: '11px', fontWeight: '800', letterSpacing: '1px' }}>CONNECTING TO VIDEO SERVER...</div>
+          </div>
+          <div style={{
+            height: '6px',
+            background: '#eee',
+            borderRadius: '3px',
+            overflow: 'hidden',
+            width: '100%'
+          }}>
+            <div style={{
+              height: '100%',
+              background: 'linear-gradient(90deg, #962067, #e91e63)',
+              width: '60%',
+              borderRadius: '3px',
+              animation: 'progress 2s ease-in-out infinite'
+            }}></div>
+          </div>
+        </div>
+
+        <p style={{ color: '#aaa', fontSize: '10px', fontWeight: '700', letterSpacing: '0.5px', margin: 0 }}>
+          PLEASE ALLOW CAMERA AND MICROPHONE ACCESS WHEN PROMPTED.
+        </p>
+
+        <div style={{ marginTop: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <div style={{ width: '40px', height: '1px', background: '#eee' }}></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#bbb', fontSize: '10px', fontWeight: '700', letterSpacing: '0.5px' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            HIPAA COMPLIANT PROTOCOL
+          </div>
+          <div style={{ width: '40px', height: '1px', background: '#eee' }}></div>
+        </div>
       </div>
+
+      <style>{`
+        @keyframes pulse {
+          0% { transform: scale(0.8); opacity: 0.5; }
+          50% { transform: scale(1.2); opacity: 1; }
+          100% { transform: scale(0.8); opacity: 0.5; }
+        }
+        @keyframes progress {
+          0% { width: 10%; }
+          50% { width: 80%; }
+          100% { width: 100%; }
+        }
+      `}</style>
+      
+      {renderFooter()}
     </div>
   );
 
@@ -308,7 +392,104 @@ function App() {
            'https://kauverytelehealth.kauverykonnect.com';
   };
 
-  const sanitizeMobileInput = (value = '') => value.replace(/\D/g, '').slice(0, 15);
+  const sanitizeMobileInput = (value = '') => value.replace(/\D/g, '').slice(0, 10);
+
+  const renderHeader = () => (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '15px 40px',
+      background: 'white',
+      borderBottom: '1px solid #f0f0f0',
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 100
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{
+          width: '35px',
+          height: '35px',
+          background: '#962067',
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          fontWeight: 'bold',
+          fontSize: '20px'
+        }}>K</div>
+        <div>
+          <div style={{ color: '#962067', fontWeight: 'bold', fontSize: '18px', lineHeight: '1' }}>Kauvery Teleconnect</div>
+          <div style={{ color: '#888', fontSize: '10px', letterSpacing: '1px', marginTop: '2px' }}>VIDEO CONSULTATION SERVICE</div>
+        </div>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <div style={{ color: '#888', fontSize: '10px', fontWeight: '600' }}>SUPPORT LINE</div>
+        <div style={{ color: '#962067', fontSize: '14px', fontWeight: '700' }}>+91 44 4000 6000</div>
+      </div>
+    </div>
+  );
+
+  const renderFooter = () => (
+    <div style={{
+      position: 'fixed',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      padding: '20px',
+      textAlign: 'center',
+      fontSize: '12px',
+      color: '#888',
+      background: 'transparent'
+    }}>
+      <div style={{ marginBottom: '8px' }}>© 2026 Kauvery Hospital. All rights reserved.</div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', fontWeight: '600', fontSize: '11px' }}>
+        <span style={{ cursor: 'pointer', color: '#962067' }}>PRIVACY POLICY</span>
+        <span style={{ cursor: 'pointer', color: '#962067' }}>TERMS OF USE</span>
+        <span style={{ cursor: 'pointer', color: '#962067' }}>HELP CENTER</span>
+      </div>
+    </div>
+  );
+
+  const renderDoctorCard = () => (
+    <div style={{
+      background: 'white',
+      borderRadius: '15px',
+      padding: '15px 25px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '15px',
+      boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
+      marginBottom: '20px',
+      width: '100%',
+      maxWidth: '450px',
+      border: '1px solid #f0f0f0'
+    }}>
+      <div style={{
+        width: '45px',
+        height: '45px',
+        background: '#f8f0f5',
+        borderRadius: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#962067'
+      }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: '700', color: '#444', fontSize: '15px' }}>{doctorInfo.name || 'Dr. Arvind Kumar'}</div>
+        <div style={{ color: '#888', fontSize: '12px' }}>{doctorInfo.speciality || 'Senior Consultant Cardiologist'}</div>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <div style={{ color: '#e91e63', fontSize: '10px', fontWeight: '800', letterSpacing: '0.5px' }}>LIVE NOW</div>
+        <div style={{ color: '#444', fontSize: '11px', fontWeight: '600' }}>Today, 10:30 AM</div>
+      </div>
+    </div>
+  );
 
   const clearConsultationSession = () => {
     sessionStorage.removeItem('consultationAccessToken');
@@ -714,6 +895,22 @@ function App() {
     if (hasNewEncryptedParams) {
       setEncryptedParams(params);
       setRequiresOtp(true);
+      
+      // Try to decrypt doctor info early for the UI
+      if (params.d || params.s) {
+        const decryptDoctorInfo = async () => {
+          try {
+            const info = {};
+            if (params.d) info.name = await decryptParameter(params.d);
+            if (params.s) info.speciality = await decryptParameter(params.s);
+            setDoctorInfo(prev => ({ ...prev, ...info }));
+          } catch (e) {
+            console.warn('Failed to decrypt doctor info early:', e);
+          }
+        };
+        decryptDoctorInfo();
+      }
+
       const storedToken = sessionStorage.getItem('consultationAccessToken');
       const storedLinkHash = sessionStorage.getItem('consultationLinkHash');
       if (storedLinkHash) {
@@ -1086,6 +1283,8 @@ function App() {
               <ErrorScreen />
             ) : requiresOtp && otpStep !== 'verified' ? (
               otpStep === 'otp' ? renderOtpVerificationScreen() : renderOtpMobileScreen()
+            ) : requiresOtp && otpStep === 'verified' && !decryptionComplete ? (
+              renderVerifiedScreen()
             ) : decryptionComplete && isTokenValid ? (
               // Redirect to video consultation after successful decryption
               <Navigate to="/consultation" replace />

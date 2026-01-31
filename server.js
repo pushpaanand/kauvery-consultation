@@ -93,6 +93,7 @@ const dbConfig = {
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
+      'https://kauveryteleconsultation-h7dggeejadcjfsev.southindia-01.azurewebsites.net',
       'https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net',
       'http://localhost:3000',
       'https://localhost:3000',
