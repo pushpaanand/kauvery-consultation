@@ -734,15 +734,12 @@ async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
   // 3. MESSAGE FORMAT (Must match Template ID approval)
   const message = `Welcome! Use OTP ${otpCode} to verify your identity and join your teleconsultation session. This code is valid only for a short time. - Kauvery Hospital`;
   
-  // 4. FORMAT MOBILE (Airtel IQ often requires '91' prefix and Array format for reliable delivery)
-  let formattedMobile = String(mobile).replace(/\D/g, '');
-  if (formattedMobile.length === 10) {
-    formattedMobile = '91' + formattedMobile;
-  }
+  // 4. FORMAT MOBILE (Airtel IQ usually expects 10 digits as a plain string for transactional)
+  const formattedMobile = String(mobile).replace(/\D/g, '').slice(-10);
 
   const payload = {
     customerId: customerId,
-    destinationAddress: [formattedMobile], // Sent as an array
+    destinationAddress: formattedMobile, // Back to string format
     message,
     sourceAddress: 'KAUVRY',
     messageType: 'SERVICE_IMPLICIT',
@@ -754,9 +751,8 @@ async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
     const https = require('https');
     const agent = new https.Agent({ rejectUnauthorized: false });
 
-    console.log(`[SMS] Sending to: ${formattedMobile} (Array format)`);
-    console.log(`[SMS] Using Template ID: ${templateId}`);
-    console.log(`[SMS] Generated Auth Header: ${finalAuth}`); // Verify this string matches your working Postman call
+    console.log(`[SMS] Sending to: ${formattedMobile}`);
+    console.log(`[SMS] Payload:`, JSON.stringify(payload));
 
     const response = await axios.post('https://iqsms.airtel.in/api/v1/send-sms', payload, {
       headers: {
@@ -767,15 +763,16 @@ async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
       timeout: 10000
     });
 
-    console.log(`[SMS] Airtel Response:`, response.data);
+    console.log(`[SMS] Success Response:`, response.data);
     return { delivered: true, providerResponse: response.data };
 
   } catch (error) {
-    console.error('❌ Airtel 401 Unauthorized - Check Credentials:', {
-      sentAuth: finalAuth,
-      errorResponse: error.response?.data
+    console.error('❌ Airtel SMS Error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      sentPayload: payload
     });
-    throw new Error(`Failed to send OTP: ${error.response?.data?.message || error.message}`);
+    throw new Error(`Failed to send OTP: ${error.response?.data?.detail || error.message}`);
   }
 }
 
