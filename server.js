@@ -734,12 +734,15 @@ async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
   // 3. MESSAGE FORMAT (Must match Template ID approval)
   const message = `Welcome! Use OTP ${otpCode} to verify your identity and join your teleconsultation session. This code is valid only for a short time. - Kauvery Hospital`;
   
-  // 4. FORMAT MOBILE
-  const formattedMobile = String(mobile).replace(/\D/g, '').slice(-10);
+  // 4. FORMAT MOBILE (Airtel IQ often requires '91' prefix and Array format for reliable delivery)
+  let formattedMobile = String(mobile).replace(/\D/g, '');
+  if (formattedMobile.length === 10) {
+    formattedMobile = '91' + formattedMobile;
+  }
 
   const payload = {
     customerId: customerId,
-    destinationAddress: formattedMobile, 
+    destinationAddress: [formattedMobile], // Sent as an array
     message,
     sourceAddress: 'KAUVRY',
     messageType: 'SERVICE_IMPLICIT',
@@ -751,7 +754,7 @@ async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
     const https = require('https');
     const agent = new https.Agent({ rejectUnauthorized: false });
 
-    console.log(`[SMS] Sending to: ${formattedMobile}`);
+    console.log(`[SMS] Sending to: ${formattedMobile} (Array format)`);
     console.log(`[SMS] Using Template ID: ${templateId}`);
     console.log(`[SMS] Generated Auth Header: ${finalAuth}`); // Verify this string matches your working Postman call
 
