@@ -355,9 +355,9 @@ app.use((req, res, next) => {
     // Media - allow WebRTC and media streams (required for video consultation)
     "media-src 'self' blob: mediastream:",
     
-    // Connect - allow API calls to same origin and Zego Cloud services
+    // Connect - allow API calls to same origin, Azure backend, and Zego Cloud services
     // WebSocket connections needed for real-time video communication
-    "connect-src 'self' https://*.zego.im wss://*.zego.im https://*.zegocloud.com wss://*.zegocloud.com https://*.kauverykonnect.com",
+    "connect-src 'self' https://*.azurewebsites.net wss://*.azurewebsites.net https://*.zego.im wss://*.zego.im https://*.zegocloud.com wss://*.zegocloud.com https://*.kauverykonnect.com",
     
     // Frame ancestors - prevent clickjacking (only allow same origin)
     "frame-ancestors 'self'",
@@ -763,8 +763,22 @@ async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
       timeout: 10000
     });
 
-    console.log(`[SMS] Success Response:`, response.data);
-    return { delivered: true, providerResponse: response.data };
+    const resp = response.data;
+    console.log(`[SMS] Response status: ${response.status}, body:`, JSON.stringify(resp));
+
+    // Airtel may return 200 with error in body (e.g. DLT rejection, invalid template)
+    const hasError = resp && (
+      (typeof resp.status === 'string' && resp.status.toLowerCase() === 'failed') ||
+      (typeof resp.status === 'number' && resp.status !== 0) ||
+      (resp.error && (resp.error.code || resp.error.message)) ||
+      (resp.message && typeof resp.message === 'string' && resp.message.toLowerCase().includes('fail'))
+    );
+    if (hasError) {
+      console.error('❌ [SMS] Provider reported failure in 200 response:', resp);
+      throw new Error(`SMS delivery failed: ${JSON.stringify(resp)}`);
+    }
+
+    return { delivered: true, providerResponse: resp };
 
   } catch (error) {
     console.error('❌ Airtel SMS Error:', {

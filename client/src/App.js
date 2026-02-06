@@ -787,6 +787,7 @@ function App() {
         setLinkHash(data.linkHash);
       }
       setOtpError('');
+      console.log('[Precheck] OTP request successful. Check server logs for [SMS] Success/Error if OTP is not received.');
     } catch (error) {
       console.error('❌ OTP request failed:', error);
       setOtpError(error.message || 'Unable to send OTP. Please try again.');
