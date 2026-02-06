@@ -39,10 +39,8 @@ const VideoCallManager = () => {
       const result = await videoCallService.initiateVideoCall(dataToSend);
       setResult(result);
       
-      console.log('Video call created successfully:', result);
     } catch (error) {
       setError(error.message);
-      console.error('Error creating video call:', error);
     } finally {
       setLoading(false);
     }

@@ -2,7 +2,10 @@
 import React, { useState, useEffect, useRef, Component } from 'react';
 import logoImage from '../assets/25YearsLogo.png';
 import './VideoConsultation.css';
+import ConsultationHeader from './ConsultationHeader';
+import ConsultationFooter from './ConsultationFooter';
 import AppointmentService from '../utils/appointmentService';
+import { theme } from '../theme/colors';
 import ZegoUIKitPrebuilt from '@zegocloud/zego-uikit-prebuilt';
 
 // Helper function to get Zego credentials from environment variables
@@ -24,7 +27,6 @@ class VideoErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.warn('🛡️ Error Boundary caught error:', error);
     
     // If it's any DOM-related error, prevent it from crashing the app
     if (error.message && (
@@ -36,7 +38,6 @@ class VideoErrorBoundary extends Component {
       error.message.includes('DOM') ||
       error.message.includes('NotFoundError')
     )) {
-      console.warn('🛡️ Preventing DOM error from crashing the app');
       
       // Try to recover by forcing a re-render
       setTimeout(() => {
@@ -304,7 +305,6 @@ const ZegoVideoInterface = ({ containerRef, isInitialized, initializationError, 
     </div>
     );
   } catch (error) {
-    console.warn('🛡️ ZegoVideoInterface error caught:', error);
     // Return a fallback UI if there's an error
     return (
       <div style={{
@@ -700,7 +700,6 @@ const VideoConsultation = () => {
         // Use the safe removeChild method we defined
         info.parentNode.removeChild(info);
       } catch (error) {
-        console.warn('🛡️ Safe cleanup - could not remove element:', error.message);
         // If all else fails, just hide the element
         info.style.display = 'none';
         info.style.visibility = 'hidden';
@@ -725,7 +724,6 @@ const VideoConsultation = () => {
       try {
         // Always check if child exists and has a parent
         if (!child) {
-          console.warn('🛡️ Safe removeChild - child is null/undefined');
           return null;
         }
         
@@ -740,10 +738,8 @@ const VideoConsultation = () => {
         }
         
         // If child has no parent, it's already removed
-        console.warn('🛡️ Safe removeChild - child has no parent, already removed');
         return child;
       } catch (error) {
-        console.warn('🛡️ Safe removeChild - preventing error:', error.message);
         // Return null to prevent further errors
         return null;
       }
@@ -753,19 +749,16 @@ const VideoConsultation = () => {
     Node.prototype.appendChild = function(child) {
       try {
         if (!child) {
-          console.warn('🛡️ Safe appendChild - child is null/undefined');
           return null;
         }
         
         // Check if child is already a child of this node
         if (child.parentNode === this) {
-          console.warn('🛡️ Safe appendChild - child is already a child of this node');
           return child;
         }
         
         return originalAppendChild.call(this, child);
       } catch (error) {
-        console.warn('🛡️ Safe appendChild - preventing error:', error.message);
         return null;
       }
     };
@@ -774,19 +767,16 @@ const VideoConsultation = () => {
     Node.prototype.insertBefore = function(newNode, referenceNode) {
       try {
         if (!newNode) {
-          console.warn('🛡️ Safe insertBefore - newNode is null/undefined');
           return null;
         }
         
         // Check if newNode is already a child of this node
         if (newNode.parentNode === this) {
-          console.warn('🛡️ Safe insertBefore - newNode is already a child of this node');
           return newNode;
         }
         
         return originalInsertBefore.call(this, newNode, referenceNode);
       } catch (error) {
-        console.warn('🛡️ Safe insertBefore - preventing error:', error.message);
         return null;
       }
     };
@@ -803,7 +793,6 @@ const VideoConsultation = () => {
         event.error.message.includes('DOM') ||
         event.error.message.includes('NotFoundError')
       )) {
-        console.warn('🛡️ DOM conflict detected - preventing crash:', event.error.message);
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
@@ -818,7 +807,6 @@ const VideoConsultation = () => {
         event.reason.message.includes('removeChild') ||
         event.reason.message.includes('NotFoundError')
       )) {
-        console.warn('🛡️ Promise rejection from DOM conflict - preventing crash:', event.reason.message);
         event.preventDefault();
         return false;
       }
@@ -831,7 +819,6 @@ const VideoConsultation = () => {
         event.reason.message.includes('replaceChild') ||
         event.reason.message.includes('NotFoundError')
       )) {
-        console.warn('🛡️ Promise rejection from DOM manipulation - preventing crash:', event.reason.message);
         event.preventDefault();
         return false;
       }
@@ -856,7 +843,6 @@ const VideoConsultation = () => {
           try {
             info.parentNode.removeChild(info);
           } catch (error) {
-            console.warn('🛡️ Cleanup error:', error.message);
             info.style.display = 'none';
           }
         }
@@ -879,7 +865,6 @@ const VideoConsultation = () => {
           zegoInstanceRef.current.leaveRoom();
           zegoInstanceRef.current = null;
         } catch (error) {
-          console.warn('Cleanup error:', error);
         }
       }
       
@@ -916,7 +901,6 @@ const VideoConsultation = () => {
         setAppointmentData(appointmentDataToSet);
       }
       } catch (error) {
-        console.error('❌ Error parsing decrypted params from App.js storage:', error);
       setAccessDenied(true);
       setAccessDeniedReason('Failed to load appointment data');
     }
@@ -941,7 +925,7 @@ const VideoConsultation = () => {
       
       // Temporarily delay Zego initialization to ensure DOM is stable
       setTimeout(() => {
-        initializeZego().catch(console.error);
+        initializeZego().catch(() => {});
       }, 1000);
     }
   }, [appointmentData]); // Run when appointment data changes
@@ -990,7 +974,7 @@ const VideoConsultation = () => {
           username: appointmentData.username,
           action: 'user_requested_end_call'
         }
-      }).catch(err => console.error('Failed to store video call event:', err));
+      }).catch(() => {});
     }
     
     setShowLeaveRoomPopup(true);
@@ -1005,7 +989,7 @@ const VideoConsultation = () => {
       // End call session
       AppointmentService.endCallSession({
         appointment_id: parseInt(appointmentId)
-      }).catch(err => console.error('Failed to end call session:', err));
+      }).catch(() => {});
       
       // Store video call event
       AppointmentService.storeVideoCallEvent({
@@ -1021,23 +1005,19 @@ const VideoConsultation = () => {
           username: appointmentData.username,
           action: 'user_confirmed_leave'
         }
-      }).catch(err => console.error('Failed to store video call event:', err));
+      }).catch(() => {});
     }
-    
-    // Add a small delay to ensure state updates properly
-    setTimeout(() => {
-      setShowHealthPackages(true);
-    }, 100);
     
     if (zegoInstanceRef.current) {
       try {
         zegoInstanceRef.current.leaveRoom();
       } catch (error) {
-        console.warn('Error leaving room:', error);
       }
     }
     setCallEnded(true);
     setZegoInitialized(false);
+    // Redirect to Kauvery Hospital and clear session
+    setTimeout(completeSessionAndRedirect, 300);
   };
 
   const handleCancelLeaveRoom = () => {
@@ -1224,20 +1204,6 @@ const VideoConsultation = () => {
                 width: 130px !important;
                 height: auto !important;
               ">
-                <div style="
-                  width: 50px !important;
-                  height: 50px !important;
-                  background: linear-gradient(135deg, #A23293, #EE2D67) !important;
-                  border-radius: 50% !important;
-                  display: flex !important;
-                  align-items: center !important;
-                  justify-content: center !important;
-                  box-shadow: 0 4px 12px rgba(162, 50, 147, 0.3) !important;
-                  flex-shrink: 0 !important;
-                  overflow: hidden !important;
-                ">
-                  <span style="font-size: 24px; color: white;">👨‍⚕️</span>
-                </div>
                 <div style="text-align: center;">
                   <p style="
                     color: #A23293 !important;
@@ -1274,20 +1240,6 @@ const VideoConsultation = () => {
                 width: 130px !important;
                 height: auto !important;
               ">
-                <div style="
-                  width: 50px !important;
-                  height: 50px !important;
-                  background: linear-gradient(135deg, #A23293, #EE2D67) !important;
-                  border-radius: 50% !important;
-                  display: flex !important;
-                  align-items: center !important;
-                  justify-content: center !important;
-                  box-shadow: 0 4px 12px rgba(162, 50, 147, 0.3) !important;
-                  flex-shrink: 0 !important;
-                  overflow: hidden !important;
-                ">
-                  <span style="font-size: 24px; color: white;">👤</span>
-                </div>
                 <div style="text-align: center;">
                   <p style="
                     color: #A23293 !important;
@@ -1386,7 +1338,6 @@ const VideoConsultation = () => {
       
       // ... rest of the existing code ...
       } catch (error) {
-        console.warn('⚠️ Error customizing pre-join view:', error);
       }
   };
   
@@ -1604,18 +1555,6 @@ const VideoConsultation = () => {
             padding: 12px;
             transition: all 0.3s ease;
           ">
-            <div style="
-              width: 24px;
-              height: 24px;
-              background: linear-gradient(135deg, #A23293, #EE2D67);
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              margin-bottom: 6px;
-            ">
-              <span style="font-size: 12px; color: white;">👨‍⚕️</span>
-            </div>
             <p style="
               color: #A23293;
               font-size: 9px;
@@ -1648,18 +1587,6 @@ const VideoConsultation = () => {
             padding: 12px;
             transition: all 0.3s ease;
           ">
-            <div style="
-              width: 24px;
-              height: 24px;
-              background: linear-gradient(135deg, #A23293, #EE2D67);
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              margin-bottom: 6px;
-            ">
-              <span style="font-size: 12px; color: white;">👤</span>
-            </div>
             <p style="
               color: #A23293;
               font-size: 9px;
@@ -1731,7 +1658,6 @@ const VideoConsultation = () => {
       document.body.appendChild(floatingInfo);
       
     } catch (error) {
-      console.warn('⚠️ Error creating floating participant info:', error);
     }
   };
   
@@ -1921,7 +1847,7 @@ const VideoConsultation = () => {
           /* Remove all forced styling to let Zego display normally */
         }
         
-        /* Ensure pre-join view has white background and no borders */
+        /* Ensure pre-join view middle area is white */
         .zego-prejoin-view,
         .zego-prejoin-container,
         .zego-prejoin {
@@ -2123,7 +2049,7 @@ const VideoConsultation = () => {
           color: #962067 !important;
         }
 
-        /* Ensure Zego pre-join view has white background and relative positioning */
+        /* Ensure Zego pre-join view middle area is white */
         .zego-prejoin-view,
         .zego-prejoin-container,
         .zego-prejoin {
@@ -2524,7 +2450,6 @@ const VideoConsultation = () => {
         window.handleEndCall = handleEndCall;
       
     } catch (error) {
-      console.warn('⚠️ Error applying custom styles:', error);
     }
   };
 
@@ -2569,7 +2494,6 @@ const VideoConsultation = () => {
         const zegoModule = await import('@zegocloud/zego-uikit-prebuilt');
         ZegoUIKitPrebuilt = zegoModule.ZegoUIKitPrebuilt || zegoModule.default || zegoModule;
       } catch (importError) {
-        console.error('❌ Error importing ZegoUIKitPrebuilt:', importError);
         throw new Error(`Failed to import ZegoUIKitPrebuilt: ${importError.message}`);
       }
       
@@ -2608,7 +2532,6 @@ const VideoConsultation = () => {
       try {
         zp = ZegoUIKitPrebuilt.create(kitToken);
       } catch (createError) {
-        console.error('❌ Error creating Zego instance:', createError);
         throw new Error(`Failed to create Zego instance: ${createError.message}`);
       }
       
@@ -2617,7 +2540,6 @@ const VideoConsultation = () => {
       }
       
       if (!zp.joinRoom) {
-        console.error('❌ Zego instance methods:', Object.keys(zp));
         throw new Error('Zego instance does not have joinRoom method');
       }
       
@@ -2689,10 +2611,9 @@ const VideoConsultation = () => {
                     roomID: result.appointment_id.toString(),
                     user_id: appointmentData.userid,
                     username: appointmentData.username
-                  }).catch(err => console.error('Failed to start call session:', err));
+                  }).catch(() => {});
                 })
                 .catch(err => {
-                  console.error('❌ Failed to store appointment when patient joined:', err);
                 });
             } else if (appointmentStored) {
               // If appointment is already stored, just track the connection event
@@ -2723,7 +2644,7 @@ const VideoConsultation = () => {
               // End call session
               AppointmentService.endCallSession({
                 appointment_id: parseInt(appointmentId)
-              }).catch(err => console.error('Failed to end call session:', err));
+              }).catch(() => {});
               
               // Store video call event
               AppointmentService.storeVideoCallEvent({
@@ -2738,15 +2659,16 @@ const VideoConsultation = () => {
                   user_id: appointmentData.userid,
                   username: appointmentData.username
                 }
-              }).catch(err => console.error('Failed to store video call event:', err));
+              }).catch(() => {});
             }
             
             setZegoInitialized(false);
             setCallEnded(true);
             zegoInstanceRef.current = null;
+            // Redirect to Kauvery Hospital and clear session after call ends
+            setTimeout(completeSessionAndRedirect, 500);
           },
           onError: (error) => {
-            console.error('❌ Zego join room error:', error);
             setInitializationError(error);
           },
                   onPreJoinViewReady: () => {
@@ -2805,7 +2727,6 @@ const VideoConsultation = () => {
                 }
               })
               .catch(err => {
-                console.error('❌ Failed to store appointment when both participants joined:', err);
               });
           }
         },
@@ -2833,7 +2754,6 @@ const VideoConsultation = () => {
         }
         });
     } catch (joinError) {
-      console.error('❌ Error during room join:', joinError);
       setInitializationError(joinError.message || 'Failed to join room');
       throw joinError;
     }
@@ -2847,12 +2767,6 @@ const VideoConsultation = () => {
     
     return true;
     } catch (error) {
-      console.error('❌ Error initializing Zego:', error);
-      console.error('❌ Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      });
       setInitializationError(error.message || 'Failed to initialize video consultation');
       setZegoInitialized(false);
       
@@ -2873,7 +2787,7 @@ const VideoConsultation = () => {
   const styles = {
     body: {
       fontFamily: "'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      background: colors.white, // White background
+      background: theme.pageBg,
       color: colors.kauveryDarkGrey,
       overflow: 'hidden',
       height: '100vh',
@@ -3192,27 +3106,12 @@ const VideoConsultation = () => {
     return (
       <div style={{
         ...styles.body,
-        padding: spacing.xl,
-        background: colors.grey50
+        padding: `${80}px ${spacing.xl} ${90}px ${spacing.xl}`,
+        background: theme.pageBg,
+        boxSizing: 'border-box',
+        overflowY: 'auto'
       }}>
-        {/* Header */}
-        <div style={{
-          ...styles.header,
-          boxShadow: '0 8px 25px rgba(150, 32, 103, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15)',
-          filter: 'drop-shadow(0 8px 25px rgba(150, 32, 103, 0.3))'
-        }}>
-          <div style={styles.brandingSection}>
-            <div style={styles.logoContainer}>
-              <div style={styles.yearsBadge}>
-                <img src={logoImage} alt="Kauvery Hospital Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-              </div>
-              <div style={styles.hospitalInfo}>
-                <h1 style={styles.hospitalName}>Kauvery Hospital</h1>
-                <p style={styles.hospitalSubtitle}>Health Check Packages</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ConsultationHeader />
 
         {/* Main Content */}
         <div style={{
@@ -3336,80 +3235,7 @@ const VideoConsultation = () => {
           </div>
         </div>
 
-        {/* Footer */}
-        <div style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          background: 'linear-gradient(135deg, #962067, #A23293)',
-          color: colors.white,
-          padding: '12px 20px',
-          textAlign: 'center',
-          fontSize: '13px',
-          fontFamily: "'Poppins', sans-serif",
-          fontWeight: '500',
-          zIndex: 1000,
-          boxShadow: '0 -2px 8px rgba(150, 32, 103, 0.3)',
-          height: '40px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '10px'
-        }}>
-          <span>© 2025 Kauvery Hospital. All Rights Reserved.</span>
-          <span>|</span>
-          <a 
-            href="https://www.kauveryhospital.com/disclaimer/" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{
-              color: colors.white,
-              textDecoration: 'none',
-              transition: 'color 0.3s ease',
-              fontSize: '13px',
-              fontWeight: '500'
-            }}
-            onMouseEnter={(e) => e.target.style.color = '#f0f0f0'}
-            onMouseLeave={(e) => e.target.style.color = colors.white}
-          >
-            Disclaimer
-          </a>
-          <span>|</span>
-          <a 
-            href="https://www.kauveryhospital.com/privacy/" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{
-              color: colors.white,
-              textDecoration: 'none',
-              transition: 'color 0.3s ease',
-              fontSize: '13px',
-              fontWeight: '500'
-            }}
-            onMouseEnter={(e) => e.target.style.color = '#f0f0f0'}
-            onMouseLeave={(e) => e.target.style.color = colors.white}
-          >
-            Privacy Policy
-          </a>
-          <span>|</span>
-          <a 
-            href="https://www.kauveryhospital.com/terms-conditions/" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{
-              color: colors.white,
-              textDecoration: 'none',
-              transition: 'color 0.3s ease',
-              fontSize: '13px',
-              fontWeight: '500'
-            }}
-            onMouseEnter={(e) => e.target.style.color = '#f0f0f0'}
-            onMouseLeave={(e) => e.target.style.color = colors.white}
-          >
-            T&C
-          </a>
-        </div>
+        <ConsultationFooter />
       </div>
     );
   };
@@ -3603,57 +3429,21 @@ const VideoConsultation = () => {
     );
   }
 
-  // Connection status indicator component
-  const ConnectionStatusIndicator = () => {
-    const getStatusColor = () => {
-      switch (connectionStatus) {
-        case 'connected': return '#4CAF50';
-        case 'disconnected': return '#F44336';
-        case 'reconnecting': return '#FF9800';
-        case 'failed': return '#F44336';
-        default: return '#9E9E9E';
+  // Clear session and redirect to Kauvery Hospital after call ends
+  const completeSessionAndRedirect = () => {
+    try {
+      sessionStorage.removeItem('consultationAccessToken');
+      sessionStorage.removeItem('consultationLinkHash');
+      sessionStorage.removeItem('decryptedParams');
+      sessionStorage.removeItem('authToken');
+      if (typeof AppointmentService?.clearAppointmentData === 'function') {
+        AppointmentService.clearAppointmentData();
+      } else {
+        sessionStorage.removeItem('appointment_id');
       }
-    };
-
-    const getStatusText = () => {
-      switch (connectionStatus) {
-        case 'connected': return 'Connected';
-        case 'disconnected': return 'Disconnected';
-        case 'reconnecting': return `Reconnecting... (${reconnectCount})`;
-        case 'failed': return 'Connection Failed';
-        default: return 'Unknown';
-      }
-    };
-
-    return (
-      <div style={{
-        position: 'absolute',
-        top: '10px',
-        right: '10px',
-        background: 'rgba(0,0,0,0.7)',
-        color: 'white',
-        padding: '8px 12px',
-        borderRadius: '20px',
-        fontSize: '12px',
-        zIndex: 1000,
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px'
-      }}>
-        <div style={{
-          width: '8px',
-          height: '8px',
-          borderRadius: '50%',
-          backgroundColor: getStatusColor()
-        }}></div>
-        {getStatusText()}
-        {participantCount > 0 && (
-          <span style={{ marginLeft: '8px' }}>
-            👥 {participantCount} participant{participantCount > 1 ? 's' : ''}
-          </span>
-        )}
-      </div>
-    );
+    } catch (e) {
+    }
+    window.location.href = 'https://kauveryhospital.com';
   };
 
   // Function to track video call events
@@ -3671,7 +3461,6 @@ const VideoConsultation = () => {
 
       await AppointmentService.storeVideoCallEvent(eventPayload);
     } catch (error) {
-      console.error(`❌ Failed to track ${eventType} event:`, error);
     }
   };
 
@@ -3694,7 +3483,6 @@ const VideoConsultation = () => {
         setConnectionStatus('connected');
       }
     } catch (error) {
-      console.error('❌ Failed to start call session:', error);
     }
   };
 
@@ -3719,7 +3507,6 @@ const VideoConsultation = () => {
         setSessionId(null);        
       }
     } catch (error) {
-      console.error('❌ Failed to end call session:', error);
     }
   };
 
@@ -3804,7 +3591,6 @@ const VideoConsultation = () => {
     const participantsList = document.getElementById('participants-list');
     
     if (!statusText || !participantsList) {
-      // console.log('❌ Status elements not found:', { statusText, participantsList });
       return;
     }
     
@@ -3828,34 +3614,8 @@ const VideoConsultation = () => {
 
   return (
     <div style={styles.body}>
-      {/* Compact Header */}
-      <div style={{
-        ...styles.header,
-        boxShadow: '0 8px 25px rgba(150, 32, 103, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15)',
-        filter: 'drop-shadow(0 8px 25px rgba(150, 32, 103, 0.3))'
-      }}>
-        {/* Hospital Branding */}
-        <div style={styles.brandingSection}>
-          <div style={styles.logoContainer}>
-            <div style={styles.yearsBadge}>
-              <img src={logoImage} alt="Kauvery Hospital Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            </div>
-            <div style={styles.hospitalInfo}>
-              <h1 style={styles.hospitalName}>Kauvery Hospital</h1>
-              <p style={styles.hospitalSubtitle}>Video Consultation Platform</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Status Badge Only */}
-        <div style={styles.statusBadge}>
-          <span style={styles.statusIcon}>🔒</span>
-          <span style={styles.statusText}>Secure Session</span>
-        </div>
-      </div>
-
-      {/* Connection Status Indicator */}
-      <ConnectionStatusIndicator />
+      {/* Header - same as OTP page */}
+      <ConsultationHeader />
 
             {/* Zego Video Container with Error Boundary */}
       <VideoErrorBoundary>
@@ -3868,7 +3628,7 @@ const VideoConsultation = () => {
             setInitializationError(null);
             setZegoInitialized(false);
             zegoInstanceRef.current = null;
-            initializeZego().catch(console.error);
+            initializeZego().catch(() => {});
           }}
           showLeaveRoomPopup={showLeaveRoomPopup}
           onConfirmLeaveRoom={handleConfirmLeaveRoom}
@@ -3881,120 +3641,8 @@ const VideoConsultation = () => {
         <span>{notification.message}</span>
       </div>
 
-      {/* Footer */}
-      <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'linear-gradient(135deg, #962067, #A23293)', // Updated gradient as requested
-        color: colors.white,
-        padding: '12px 20px',
-        textAlign: 'center',
-        fontSize: '13px',
-        fontFamily: "'Poppins', sans-serif",
-        fontWeight: '500',
-        zIndex: 1000,
-        boxShadow: '0 -2px 8px rgba(150, 32, 103, 0.3)',
-        height: '40px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '10px',
-        // Responsive footer
-        '@media (max-width: 768px)': {
-          padding: '10px 16px',
-          fontSize: '12px',
-          height: '35px',
-          gap: '8px'
-        },
-        '@media (max-width: 480px)': {
-          padding: '8px 12px',
-          fontSize: '11px',
-          height: '30px',
-          gap: '6px',
-          flexWrap: 'wrap'
-        }
-      }}>
-        <span style={{ 
-          fontSize: '13px', 
-          color: colors.white,
-          '@media (max-width: 768px)': { fontSize: '12px' },
-          '@media (max-width: 480px)': { fontSize: '11px' }
-        }}>© 2025 Kauvery Hospital. All Rights Reserved.</span>
-        <span style={{ 
-          color: colors.white, 
-          fontSize: '12px',
-          '@media (max-width: 768px)': { fontSize: '11px' },
-          '@media (max-width: 480px)': { fontSize: '10px' }
-        }}>|</span>
-        <a 
-          href="https://www.kauveryhospital.com/disclaimer/" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          style={{
-            color: colors.white,
-            textDecoration: 'none',
-            transition: 'color 0.3s ease',
-            fontSize: '13px',
-            fontWeight: '500',
-            '@media (max-width: 768px)': { fontSize: '12px' },
-            '@media (max-width: 480px)': { fontSize: '11px' }
-          }}
-          onMouseEnter={(e) => e.target.style.color = '#f0f0f0'}
-          onMouseLeave={(e) => e.target.style.color = colors.white}
-        >
-          Disclaimer
-        </a>
-        <span style={{ 
-          color: colors.white, 
-          fontSize: '12px',
-          '@media (max-width: 768px)': { fontSize: '11px' },
-          '@media (max-width: 480px)': { fontSize: '10px' }
-        }}>|</span>
-        <a 
-          href="https://www.kauveryhospital.com/privacy/" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          style={{
-            color: colors.white,
-            textDecoration: 'none',
-            transition: 'color 0.3s ease',
-            fontSize: '13px',
-            fontWeight: '500',
-            '@media (max-width: 768px)': { fontSize: '12px' },
-            '@media (max-width: 480px)': { fontSize: '11px' }
-          }}
-          onMouseEnter={(e) => e.target.style.color = '#f0f0f0'}
-          onMouseLeave={(e) => e.target.style.color = colors.white}
-        >
-          Privacy Policy
-        </a>
-        <span style={{ 
-          color: colors.white, 
-          fontSize: '12px',
-          '@media (max-width: 768px)': { fontSize: '11px' },
-          '@media (max-width: 480px)': { fontSize: '10px' }
-        }}>|</span>
-        <a 
-          href="https://www.kauveryhospital.com/terms-conditions/" 
-          target="_blank" 
-          rel="noopener noreferrer"
-          style={{
-            color: colors.white,
-            textDecoration: 'none',
-            transition: 'color 0.3s ease',
-            fontSize: '13px',
-            fontWeight: '500',
-            '@media (max-width: 768px)': { fontSize: '12px' },
-            '@media (max-width: 480px)': { fontSize: '11px' }
-          }}
-          onMouseEnter={(e) => e.target.style.color = '#f0f0f0'}
-          onMouseLeave={(e) => e.target.style.color = colors.white}
-        >
-          T&C
-        </a>
-      </div>
+      {/* Footer - same as OTP page */}
+      <ConsultationFooter />
       
 
     </div>

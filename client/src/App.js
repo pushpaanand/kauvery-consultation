@@ -1,8 +1,11 @@
 /* eslint-disable no-unused-vars, react-hooks/exhaustive-deps */
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import VideoConsultation from "./components/VideoConsultation";
+import ConsultationHeader from "./components/ConsultationHeader";
+import ConsultationFooter from "./components/ConsultationFooter";
 import AppointmentService from "./utils/appointmentService";
+import { theme } from "./theme/colors";
 
 function App() {
   const [token, setToken] = useState("");
@@ -23,9 +26,12 @@ function App() {
   const [otpError, setOtpError] = useState('');
   const [maskedMobile, setMaskedMobile] = useState('');
   const [appointmentHint, setAppointmentHint] = useState('');
-  const [doctorInfo, setDoctorInfo] = useState({ name: '', speciality: '' });
+  const [doctorInfo, setDoctorInfo] = useState({ name: '', speciality: '', appointment_date: '', appointment_time: '' });
   const [encryptedParams, setEncryptedParams] = useState(null);
   const [linkHash, setLinkHash] = useState('');
+  const [resendCooldownRemaining, setResendCooldownRemaining] = useState(0);
+  const [isOtpInputFocused, setIsOtpInputFocused] = useState(false);
+  const otpInputRef = useRef(null);
 
   // Environment validation function
   const validateEnvironment = () => {
@@ -39,8 +45,6 @@ function App() {
     const missing = required.filter(key => !process.env[key]);
     
     if (missing.length > 0) {
-      console.error('❌ Missing required environment variables:', missing);
-      console.error('Please check your .env file');
       return false;
     }
     
@@ -52,18 +56,19 @@ function App() {
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      justifyContent: 'center',
       minHeight: '100vh',
-      background: '#fff9fb',
-      fontFamily: "'Inter', sans-serif",
-      padding: '100px 20px'
+      background: theme.pageBg,
+      fontFamily: "'Poppins', sans-serif",
+      padding: '70px 20px 90px 20px',
+      boxSizing: 'border-box',
+      overflowY: 'auto'
     }}>
-      {renderHeader()}
+      <ConsultationHeader />
       
       {renderDoctorCard()}
 
       <div style={{
-        background: 'white',
+        background: theme.cardBg,
         borderRadius: '30px',
         padding: '40px',
         width: '100%',
@@ -148,7 +153,7 @@ function App() {
         </div>
       </div>
 
-      {renderFooter()}
+      <ConsultationFooter />
     </div>
   );
 
@@ -157,18 +162,19 @@ function App() {
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      justifyContent: 'center',
       minHeight: '100vh',
-      background: '#fff9fb',
-      fontFamily: "'Inter', sans-serif",
-      padding: '100px 20px'
+      background: theme.pageBg,
+      fontFamily: "'Poppins', sans-serif",
+      padding: '70px 20px 90px 20px',
+      boxSizing: 'border-box',
+      overflowY: 'auto'
     }}>
-      {renderHeader()}
+      <ConsultationHeader />
       
       {renderDoctorCard()}
 
       <div style={{
-        background: 'white',
+        background: theme.cardBg,
         borderRadius: '30px',
         padding: '40px',
         width: '100%',
@@ -187,12 +193,27 @@ function App() {
             ONE-TIME PASSWORD
           </label>
           
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '30px' }}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => otpInputRef.current?.focus()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); otpInputRef.current?.focus(); } }}
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '10px',
+              marginBottom: '30px',
+              cursor: 'text',
+              position: 'relative',
+              outline: 'none'
+            }}
+            aria-label="Enter OTP - click to focus input"
+          >
             {[...Array(6)].map((_, i) => (
               <div key={i} style={{
                 width: '45px',
                 height: '55px',
-                border: '1px solid #f0f0f0',
+                border: '2px solid ' + (isOtpInputFocused ? '#962067' : '#f0f0f0'),
                 borderRadius: '12px',
                 background: '#fafafa',
                 display: 'flex',
@@ -200,23 +221,42 @@ function App() {
                 justifyContent: 'center',
                 fontSize: '24px',
                 fontWeight: '700',
-                color: '#962067'
+                color: '#962067',
+                transition: 'border-color 0.2s'
               }}>
-                {otpInput[i] ? otpInput[i] : <div style={{ width: '6px', height: '6px', background: '#ddd', borderRadius: '50%' }}></div>}
-                {otpInput.length === i && <div style={{ width: '2px', height: '24px', background: '#962067', animation: 'blink 1s infinite' }}></div>}
+                {otpInput[i] ? otpInput[i] : <div style={{ width: '6px', height: '6px', background: '#ddd', borderRadius: '50%' }} />}
+                {otpInput.length === i && <div style={{ width: '2px', height: '24px', background: '#962067', animation: 'blink 1s infinite' }} />}
               </div>
             ))}
             <input
+              ref={otpInputRef}
               type="tel"
+              inputMode="numeric"
+              autoComplete="one-time-code"
               autoFocus
               value={otpInput}
-              onChange={(e) => setOtpInput(sanitizeMobileInput(e.target.value).slice(0, 6))}
+              onChange={(e) => setOtpInput(sanitizeOtpInput(e.target.value))}
+              onFocus={() => setIsOtpInputFocused(true)}
+              onBlur={() => setIsOtpInputFocused(false)}
+              onPaste={(e) => {
+                e.preventDefault();
+                const pasted = sanitizeOtpInput((e.clipboardData?.getData('text') || '').slice(0, 6));
+                setOtpInput(pasted);
+              }}
               style={{
                 position: 'absolute',
+                left: 0,
+                top: 0,
                 opacity: 0,
-                width: '1px',
-                height: '1px'
+                width: '100%',
+                height: '100%',
+                margin: 0,
+                padding: 0,
+                border: 'none',
+                outline: 'none'
               }}
+              aria-label="OTP input"
+              maxLength={6}
             />
           </div>
 
@@ -228,15 +268,15 @@ function App() {
 
           <button
             type="submit"
-            disabled={otpLoading || otpInput.length < 4}
+            disabled={otpLoading || otpInput.length < 6}
             style={{
               width: '100%',
-              background: (otpLoading || otpInput.length < 4) ? '#b0b0b0' : '#962067',
+              background: (otpLoading || otpInput.length < 6) ? '#b0b0b0' : '#962067',
               color: 'white',
               border: 'none',
               padding: '16px',
               borderRadius: '12px',
-              cursor: (otpLoading || otpInput.length < 4) ? 'not-allowed' : 'pointer',
+              cursor: (otpLoading || otpInput.length < 6) ? 'not-allowed' : 'pointer',
               fontSize: '16px',
               fontWeight: '700',
               transition: 'all 0.3s ease',
@@ -248,7 +288,20 @@ function App() {
         </form>
 
         <div style={{ color: '#bbb', fontSize: '11px', fontWeight: '700' }}>
-          RESEND CODE IN <span style={{ color: '#962067' }}>15S</span>
+          {resendCooldownRemaining > 0 ? (
+            <>RESEND CODE IN <span style={{ color: '#962067' }}>{resendCooldownRemaining}S</span></>
+          ) : (
+            <span
+              onClick={() => !otpLoading && resendCooldownRemaining === 0 && handleResendOtp()}
+              style={{
+                color: '#962067',
+                cursor: otpLoading ? 'not-allowed' : 'pointer',
+                textDecoration: 'underline'
+              }}
+            >
+              RESEND CODE
+            </span>
+          )}
         </div>
 
         <div style={{ marginTop: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
@@ -268,7 +321,7 @@ function App() {
         }
       `}</style>
       
-      {renderFooter()}
+      <ConsultationFooter />
     </div>
   );
 
@@ -277,18 +330,19 @@ function App() {
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      justifyContent: 'center',
       minHeight: '100vh',
-      background: '#fff9fb',
-      fontFamily: "'Inter', sans-serif",
-      padding: '100px 20px'
+      background: theme.pageBg,
+      fontFamily: "'Poppins', sans-serif",
+      padding: '70px 20px 90px 20px',
+      boxSizing: 'border-box',
+      overflowY: 'auto'
     }}>
-      {renderHeader()}
+      <ConsultationHeader />
       
       {renderDoctorCard()}
 
       <div style={{
-        background: 'white',
+        background: theme.cardBg,
         borderRadius: '30px',
         padding: '50px 40px',
         width: '100%',
@@ -371,7 +425,7 @@ function App() {
         }
       `}</style>
       
-      {renderFooter()}
+      <ConsultationFooter />
     </div>
   );
 
@@ -380,7 +434,7 @@ function App() {
     const isValid = validateEnvironment();
     
     if (!isValid) {
-      console.error('❌ App.js: Environment validation failed. Please check your .env file.');
+      // Environment validation failed
     } else {
      
     }
@@ -393,70 +447,23 @@ function App() {
   };
 
   const sanitizeMobileInput = (value = '') => value.replace(/\D/g, '').slice(0, 10);
+  // VAPT: OTP input - digits only, max 6 chars, prevent injection
+  const sanitizeOtpInput = (value = '') => String(value).replace(/\D/g, '').slice(0, 6);
 
-  const renderHeader = () => (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: '15px 40px',
-      background: 'white',
-      borderBottom: '1px solid #f0f0f0',
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 100
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{
-          width: '35px',
-          height: '35px',
-          background: '#962067',
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white',
-          fontWeight: 'bold',
-          fontSize: '20px'
-        }}>K</div>
-        <div>
-          <div style={{ color: '#962067', fontWeight: 'bold', fontSize: '18px', lineHeight: '1' }}>Kauvery Teleconnect</div>
-          <div style={{ color: '#888', fontSize: '10px', letterSpacing: '1px', marginTop: '2px' }}>VIDEO CONSULTATION SERVICE</div>
-        </div>
-      </div>
-      <div style={{ textAlign: 'right' }}>
-        <div style={{ color: '#888', fontSize: '10px', fontWeight: '600' }}>SUPPORT LINE</div>
-        <div style={{ color: '#962067', fontSize: '14px', fontWeight: '700' }}>+91 44 4000 6000</div>
-      </div>
-    </div>
-  );
+  // Format appointment date and time for display (from API)
+  const formatAppointmentDateTime = (dateStr, timeStr) => {
+    if (!dateStr && !timeStr) return '';
+    const datePart = dateStr ? String(dateStr).split(' ')[0] : ''; // DD/MM/YYYY
+    const timePart = timeStr ? String(timeStr).trim() : '';
+    if (!datePart && !timePart) return '';
+    if (datePart && timePart) return `${datePart}, ${timePart}`;
+    return datePart || timePart;
+  };
 
-  const renderFooter = () => (
-    <div style={{
-      position: 'fixed',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      padding: '20px',
-      textAlign: 'center',
-      fontSize: '12px',
-      color: '#888',
-      background: 'transparent'
-    }}>
-      <div style={{ marginBottom: '8px' }}>© 2026 Kauvery Hospital. All rights reserved.</div>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', fontWeight: '600', fontSize: '11px' }}>
-        <span style={{ cursor: 'pointer', color: '#962067' }}>PRIVACY POLICY</span>
-        <span style={{ cursor: 'pointer', color: '#962067' }}>TERMS OF USE</span>
-        <span style={{ cursor: 'pointer', color: '#962067' }}>HELP CENTER</span>
-      </div>
-    </div>
-  );
 
   const renderDoctorCard = () => (
     <div style={{
-      background: 'white',
+      background: theme.cardBg,
       borderRadius: '15px',
       padding: '15px 25px',
       display: 'flex',
@@ -481,12 +488,12 @@ function App() {
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
       </div>
       <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: '700', color: '#444', fontSize: '15px' }}>{doctorInfo.name || 'Dr. Arvind Kumar'}</div>
-        <div style={{ color: '#888', fontSize: '12px' }}>{doctorInfo.speciality || 'Senior Consultant Cardiologist'}</div>
+        <div style={{ fontWeight: '700', color: '#444', fontSize: '15px' }}>{doctorInfo.name || '—'}</div>
+        <div style={{ color: '#888', fontSize: '12px' }}>{doctorInfo.speciality || '—'}</div>
       </div>
       <div style={{ textAlign: 'right' }}>
         <div style={{ color: '#e91e63', fontSize: '10px', fontWeight: '800', letterSpacing: '0.5px' }}>LIVE NOW</div>
-        <div style={{ color: '#444', fontSize: '11px', fontWeight: '600' }}>Today, 10:30 AM</div>
+        <div style={{ color: '#444', fontSize: '11px', fontWeight: '600' }}>{formatAppointmentDateTime(doctorInfo.appointment_date, doctorInfo.appointment_time) || '—'}</div>
       </div>
     </div>
   );
@@ -517,14 +524,12 @@ function App() {
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ App.js: Server error response:', errorText);
         throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
       
       const data = await response.json();
       return data.decryptedText;
     } catch (error) {
-      console.error('❌ App.js: Decryption failed:', error);
       throw error;
     }
   };
@@ -560,13 +565,10 @@ function App() {
           id: result.appointment_id,
           // roomId: result.appointment_id.toString() // Use just appointment ID as room ID
         });
-      } else {
-        console.error('❌ App.js: Failed to store appointment:', result.error);
       }
       
       return result;
     } catch (error) {
-      console.error('❌ App.js: Failed to store appointment data:', error);
       return { success: false, error: error.message };
     }
   };
@@ -629,7 +631,6 @@ function App() {
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ App.js: Batch decrypt server error response:', errorText);
         if (response.status === 401 || response.status === 403) {
           const authError = new Error('Verification expired. Please request a new OTP.');
           authError.code = 'CONSULTATION_ACCESS_DENIED';
@@ -663,7 +664,6 @@ function App() {
       
       return decryptedData;
     } catch (error) {
-      console.error('❌ App.js: Batch decryption failed:', error);
       throw error;
     }
   };
@@ -738,7 +738,6 @@ function App() {
       setIsDecrypting(false);
       
     } catch (error) {
-      console.error('❌ App.js: Failed to process multiple encrypted parameters:', error);
       if (error.code === 'CONSULTATION_ACCESS_DENIED') {
         clearConsultationSession();
         setOtpError('Your verification expired. Please request a new OTP.');
@@ -772,7 +771,13 @@ function App() {
           params: encryptedParams
         })
       });
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (_) {
+        throw new Error('Server error. Please try again.');
+      }
       if (!response.ok || !data.success) {
         throw new Error(data.message || 'Unable to send OTP. Please try again.');
       }
@@ -782,14 +787,14 @@ function App() {
       setAppointmentHint(data.appointmentHint || '');
       setOtpStep('otp');
       setOtpInput('');
+      setResendCooldownRemaining(data.resendCooldownSeconds ?? 30);
       if (data.linkHash) {
         sessionStorage.setItem('consultationLinkHash', data.linkHash);
         setLinkHash(data.linkHash);
       }
       setOtpError('');
-      console.log('[Precheck] OTP request successful. Check server logs for [SMS] Success/Error if OTP is not received.');
+      otpInputRef.current?.focus();
     } catch (error) {
-      console.error('❌ OTP request failed:', error);
       setOtpError(error.message || 'Unable to send OTP. Please try again.');
     } finally {
       setOtpLoading(false);
@@ -811,8 +816,8 @@ function App() {
       setOtpError('OTP session expired. Please request a new OTP.');
       return;
     }
-    if (!otpInput || otpInput.length < 4) {
-      setOtpError('Please enter the OTP sent to your mobile.');
+    if (!otpInput || otpInput.length < 6) {
+      setOtpError('Please enter the complete 6-digit OTP sent to your mobile.');
       return;
     }
     setOtpLoading(true);
@@ -839,7 +844,6 @@ function App() {
       setOtpError('');
       setOtpInput('');
     } catch (error) {
-      console.error('❌ OTP verification failed:', error);
       setOtpError(error.message || 'OTP verification failed. Please try again.');
     } finally {
       setOtpLoading(false);
@@ -857,6 +861,15 @@ function App() {
     setOtpStep('mobile');
     setOtpError('');
   };
+
+  // Resend OTP countdown timer (seconds from backend precheck response)
+  useEffect(() => {
+    if (otpStep !== 'otp' || resendCooldownRemaining <= 0) return;
+    const t = setInterval(() => {
+      setResendCooldownRemaining((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [otpStep, resendCooldownRemaining]);
 
   // Simple and correct validateAppointmentDate function
   const validateAppointmentDate = (appointmentDate, appointmentTime) => {
@@ -881,7 +894,6 @@ function App() {
         appointmentDate: appointmentDateString
       };
     } catch (error) {
-      console.error('❌ Error validating appointment date:', error);
       return {
         isValid: false,
         error: error.message
@@ -897,16 +909,17 @@ function App() {
       setEncryptedParams(params);
       setRequiresOtp(true);
       
-      // Try to decrypt doctor info early for the UI
-      if (params.d || params.s) {
+      // Try to decrypt doctor and appointment info early for the UI
+      if (params.d || params.s || params.ad || params.at) {
         const decryptDoctorInfo = async () => {
           try {
             const info = {};
             if (params.d) info.name = await decryptParameter(params.d);
             if (params.s) info.speciality = await decryptParameter(params.s);
+            if (params.ad) info.appointment_date = await decryptParameter(params.ad);
+            if (params.at) info.appointment_time = await decryptParameter(params.at);
             setDoctorInfo(prev => ({ ...prev, ...info }));
           } catch (e) {
-            console.warn('Failed to decrypt doctor info early:', e);
           }
         };
         decryptDoctorInfo();
@@ -983,7 +996,6 @@ function App() {
         setIsDecrypting(false);
         
       } catch (error) {
-        console.error('❌ App.js: Failed to process encoded ID:', error);
         setDecryptionError(error.message);
         setIsDecrypting(false);
         setIsTokenValid(false);
@@ -1035,7 +1047,6 @@ function App() {
         setIsDecrypting(false);
         
       } catch (error) {
-        console.error('❌ App.js: Failed to process direct parameters:', error);
         setDecryptionError(error.message);
         setIsDecrypting(false);
         setIsTokenValid(false);
@@ -1095,13 +1106,13 @@ function App() {
       justifyContent: 'center',
       alignItems: 'center',
       height: '100vh',
-      backgroundColor: '#f0f2f5',
-      fontFamily: 'Arial, sans-serif'
+      backgroundColor: theme.pageBg,
+      fontFamily: "'Poppins', sans-serif"
     }}>
       <div style={{
         textAlign: 'center',
         padding: '40px',
-        backgroundColor: 'white',
+        backgroundColor: theme.cardBg,
         borderRadius: '10px',
         boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
         maxWidth: '400px',
@@ -1164,16 +1175,16 @@ function App() {
         justifyContent: 'center',
         alignItems: 'center',
         height: '100vh',
-        background: 'white',
-        color: '#962067',
+        background: theme.pageBg,
+        color: theme.primary,
         fontFamily: "'Poppins', sans-serif",
         textAlign: 'center',
-        padding: '20px 20px 60px 20px', // Add bottom padding for footer
+        padding: '20px 20px 90px 20px',
         boxSizing: 'border-box',
-        overflow: 'hidden' // Prevent scroll bar
+        overflowY: 'auto'
       }}>
         <div style={{
-          background: 'white',
+          background: theme.cardBg,
           borderRadius: '20px',
           padding: '40px',
           maxWidth: '500px',
@@ -1296,16 +1307,16 @@ function App() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 height: '100vh',
-                background: 'white',
+                background: theme.cardBg,
                 color: '#962067',
                 fontFamily: "'Poppins', sans-serif",
                 textAlign: 'center',
-                padding: '20px 20px 60px 20px', // Add bottom padding for footer
+                padding: '20px 20px 90px 20px',
                 boxSizing: 'border-box',
-                overflow: 'hidden' // Prevent scroll bar
+                overflowY: 'auto'
               }}>
                 <div style={{
-                  background: 'white',
+                  background: theme.cardBg,
                   borderRadius: '20px',
                   padding: '40px',
                   maxWidth: '500px',

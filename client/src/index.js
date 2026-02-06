@@ -9,7 +9,6 @@ import { validateEnvironmentVariables } from './utils/validateEnvironment';
 try {
   validateEnvironmentVariables();
 } catch (error) {
-  console.error('❌ Environment validation failed:', error.message);
   // In production, fail the build
   if (process.env.NODE_ENV === 'production') {
     throw error;

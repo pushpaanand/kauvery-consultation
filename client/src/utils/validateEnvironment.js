@@ -57,19 +57,9 @@ function validateEnvironmentVariables() {
   
   // Throw errors in development to prevent issues
   if (errors.length > 0) {
-    console.error('❌ SECURITY ERROR: Internal IP addresses found in environment variables:');
-    errors.forEach(error => console.error(`  - ${error}`));
-    console.error('Please use public URLs instead of internal IP addresses.');
-    
     if (process.env.NODE_ENV === 'production') {
       throw new Error('Build failed: Internal IP addresses detected in environment variables');
     }
-  }
-  
-  // Warn in development
-  if (warnings.length > 0) {
-    console.warn('⚠️ WARNING: Localhost URLs found in environment variables:');
-    warnings.forEach(warning => console.warn(`  - ${warning}`));
   }
   
   return { errors, warnings };

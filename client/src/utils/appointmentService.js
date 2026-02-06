@@ -17,7 +17,6 @@ function getServerUrl() {
   
   // If environment URL contains private IP, use relative URL instead
   if (envUrl && privateIPPatterns.some(pattern => pattern.test(envUrl))) {
-    console.warn('⚠️ SECURITY: Internal IP detected in REACT_APP_SERVER_URL. Using relative URL instead.');
     return ''; // Empty string = relative URL
   }
   
@@ -54,7 +53,6 @@ class AppointmentService {
       
       return result;
     } catch (error) {
-      console.error('❌ Error storing appointment:', error);
       throw error;
     }
   }
@@ -81,7 +79,6 @@ class AppointmentService {
       
       return result;
     } catch (error) {
-      console.error('❌ Error storing video call event:', error);
       throw error;
     }
   }
@@ -107,7 +104,6 @@ class AppointmentService {
       
       return result;
     } catch (error) {
-      console.error('❌ Error starting call session:', error);
       throw error;
     }
   }
@@ -133,7 +129,6 @@ class AppointmentService {
       
       return result;
     } catch (error) {
-      console.error('❌ Error ending call session:', error);
       throw error;
     }
   }
@@ -154,7 +149,6 @@ class AppointmentService {
       
       return result;
     } catch (error) {
-      console.error('❌ Error fetching appointment:', error);
       throw error;
     }
   }

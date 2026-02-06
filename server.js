@@ -70,10 +70,10 @@ app.disable('x-powered-by');
 
 // Database configuration for Azure SQL Database
 const dbConfig = {
-  server: process.env.DB_SERVER || 'videoconsultation.database.windows.net',
-  database: process.env.DB_NAME || 'videoconsultation_db',
-  user: process.env.DB_USER || 'videoconsultation', // Updated username
-  password: process.env.DB_PASSWORD || 'kauvery@123', // Updated password
+  server: process.env.DB_SERVER || '',
+  database: process.env.DB_NAME || '',
+  user: process.env.DB_USER || '', // Updated username
+  password: process.env.DB_PASSWORD || '', // Updated password
   port: parseInt(process.env.DB_PORT) || 1433,
   options: {
     encrypt: true,
@@ -547,10 +547,10 @@ const formatTimeForSQL = (timeString) => {
 
 // External service configuration (kept in environment variables for security)
 const CRM_CONFIG = {
-  tokenUrl: process.env.CRM_TOKEN_URL || 'https://unfydcrm.kauveryhospital.com/DoctorsAPI_DEV/Tokens',
-  teleMobileUrl: process.env.CRM_TELE_MOBILE_URL || 'https://unfydcrm.kauveryhospital.com/DoctorsAPI_DEV/TeleMobile',
-  username: process.env.CRM_USERNAME || 'Kauvery',
-  password: process.env.CRM_PASSWORD || 'Kmc@123',
+  tokenUrl: process.env.CRM_TOKEN_URL || '',
+  teleMobileUrl: process.env.CRM_TELE_MOBILE_URL || '',
+  username: process.env.CRM_USERNAME || '',
+  password: process.env.CRM_PASSWORD || '',
   grantType: process.env.CRM_GRANT_TYPE || 'password',
   requestTimeoutMs: parseInt(process.env.CRM_REQUEST_TIMEOUT_MS, 10) || 7000
 };
@@ -558,20 +558,20 @@ const CRM_CONFIG = {
 const OTP_SECURITY_CONFIG = {
   otpLength: parseInt(process.env.CONSULTATION_OTP_LENGTH, 10) || 6,
   otpTtlMs: parseInt(process.env.CONSULTATION_OTP_TTL_MS, 10) || 5 * 60 * 1000,
-  resendCooldownMs: parseInt(process.env.CONSULTATION_OTP_RESEND_COOLDOWN_MS, 10) || 60 * 1000,
+  resendCooldownMs: parseInt(process.env.CONSULTATION_OTP_RESEND_COOLDOWN_MS, 10) || 30 * 1000,
   maxAttempts: parseInt(process.env.CONSULTATION_OTP_MAX_ATTEMPTS, 10) || 5,
   accessTokenTtlMs: parseInt(process.env.CONSULTATION_ACCESS_TOKEN_TTL_MS, 10) || 15 * 60 * 1000,
   smsUrl: process.env.OTP_SMS_URL || 'https://iqsms.airtel.in/api/v1/send-sms',
-  smsCustomerId: process.env.OTP_SMS_CUSTOMER_ID || 'SRI_KAUVER_cm361K07zDZnE0UitOhY',
-  smsUser: process.env.OTP_SMS_USER || 'SRI_KAUVER_cm361K07zDZnE0UitOhY', 
-  smsPassword: process.env.OTP_SMS_PASSWORD || 'Sri@222#', 
+  smsCustomerId: process.env.OTP_SMS_CUSTOMER_ID,
+  smsUser: process.env.OTP_SMS_USER || process.env.OTP_SMS_CUSTOMER_ID,
+  smsPassword: process.env.OTP_SMS_PASSWORD,
   smsSourceAddress: process.env.OTP_SMS_SOURCE_ADDRESS || 'KAUVRY',
-  smsTemplateId: process.env.OTP_SMS_TEMPLATE_ID || '1707176742918189539',
-  smsEntityId: process.env.OTP_SMS_ENTITY_ID || '1701159160747787217',
+  smsTemplateId: process.env.OTP_SMS_TEMPLATE_ID,
+  smsEntityId: process.env.OTP_SMS_ENTITY_ID,
   smsMessageType: process.env.OTP_SMS_MESSAGE_TYPE || 'SERVICE_IMPLICIT',
   smsBasicAuth: process.env.OTP_SMS_BASIC_AUTH || '',
   smsEnableUrlShortener: (process.env.OTP_SMS_ENABLE_SHORT_URL || 'false').toLowerCase() === 'true',
-  smsMessage: process.env.OTP_SMS_MESSAGE || 'Welcome! Use OTP {#var#} to verify your identity and join your teleconsultation session. This code is valid only for a short time. - Kauvery Hospital'
+  smsMessage: process.env.OTP_SMS_MESSAGE || 'Welcome! Use OTP {#var#} to verify your identity and join your Teleconsultation video session.\n\nThis code is confidential and valid for a short time only.\n\nkauvery hospital'
 };
 
 const CONSULTATION_ACCESS_ENABLED = (process.env.ENABLE_CONSULTATION_ACCESS || 'true').toLowerCase() === 'true';
@@ -720,29 +720,38 @@ async function verifyAppointmentMobile(appointmentNumber, mobile) {
 }
 
 async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
-  // 1. HARDCODED AIRTEL CREDENTIALS (Matches your working snippet)
-  const username = 'SRI_KAUVER_cm361K07zDZnE0UitOhY';
-  const password = 'Sri@222#';
-  const customerId = 'SRI_KAUVER_cm361K07zDZnE0UitOhY';
-  const templateId = '1707176742918189539';
-  const entityId = '1701159160747787217';
+  // Use env variables from OTP_SECURITY_CONFIG (VAPT: no hardcoded credentials)
+  const username = OTP_SECURITY_CONFIG.smsUser || OTP_SECURITY_CONFIG.smsCustomerId;
+  const password = OTP_SECURITY_CONFIG.smsPassword;
+  const customerId = OTP_SECURITY_CONFIG.smsCustomerId;
+  const templateId = OTP_SECURITY_CONFIG.smsTemplateId;
+  const entityId = OTP_SECURITY_CONFIG.smsEntityId;
+  const smsUrl = OTP_SECURITY_CONFIG.smsUrl;
+  const sourceAddress = OTP_SECURITY_CONFIG.smsSourceAddress;
 
-  // 2. GENERATE AUTH HEADER
+  if (!username || !password) {
+    throw new Error('SMS configuration incomplete. Check server environment variables.');
+  }
+
   const auth = Buffer.from(`${username}:${password}`).toString('base64');
   const finalAuth = `Basic ${auth}`;
 
-  // 3. MESSAGE FORMAT (Must match Template ID approval)
-  const message = `Welcome! Use OTP ${otpCode} to verify your identity and join your teleconsultation session. This code is valid only for a short time. - Kauvery Hospital`;
+  // Message format (must match DLT-approved template exactly)
+  const message = `Welcome! Use OTP ${otpCode} to verify your identity and join your Teleconsultation video session.
+
+This code is confidential and valid for a short time only.
+
+kauvery hospital`;
   
   // 4. FORMAT MOBILE (Airtel IQ usually expects 10 digits as a plain string for transactional)
   const formattedMobile = String(mobile).replace(/\D/g, '').slice(-10);
 
   const payload = {
     customerId: customerId,
-    destinationAddress: formattedMobile, // Back to string format
+    destinationAddress: formattedMobile,
     message,
-    sourceAddress: 'KAUVRY',
-    messageType: 'SERVICE_IMPLICIT',
+    sourceAddress: sourceAddress || 'KAUVRY',
+    messageType: OTP_SECURITY_CONFIG.smsMessageType || 'SERVICE_IMPLICIT',
     dltTemplateId: templateId,
     entityId: entityId,
   };
@@ -751,10 +760,7 @@ async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
     const https = require('https');
     const agent = new https.Agent({ rejectUnauthorized: false });
 
-    console.log(`[SMS] Sending to: ${formattedMobile}`);
-    console.log(`[SMS] Payload:`, JSON.stringify(payload));
-
-    const response = await axios.post('https://iqsms.airtel.in/api/v1/send-sms', payload, {
+    const response = await axios.post(smsUrl, payload, {
       headers: {
         'Authorization': finalAuth,
         'Content-Type': 'application/json'
@@ -764,7 +770,6 @@ async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
     });
 
     const resp = response.data;
-    console.log(`[SMS] Response status: ${response.status}, body:`, JSON.stringify(resp));
 
     // Airtel may return 200 with error in body (e.g. DLT rejection, invalid template)
     const hasError = resp && (
@@ -774,19 +779,14 @@ async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
       (resp.message && typeof resp.message === 'string' && resp.message.toLowerCase().includes('fail'))
     );
     if (hasError) {
-      console.error('❌ [SMS] Provider reported failure in 200 response:', resp);
       throw new Error(`SMS delivery failed: ${JSON.stringify(resp)}`);
     }
 
     return { delivered: true, providerResponse: resp };
 
   } catch (error) {
-    console.error('❌ Airtel SMS Error:', {
-      status: error.response?.status,
-      data: error.response?.data,
-      sentPayload: payload
-    });
-    throw new Error(`Failed to send OTP: ${error.response?.data?.detail || error.message}`);
+    const apiMessage = error.response?.data?.detail || error.response?.data?.message || error.response?.data?.error || error.message;
+    throw new Error(`Failed to send OTP: ${apiMessage}`);
   }
 }
 
@@ -1403,18 +1403,16 @@ app.post('/api/consultation/precheck', async (req, res) => {
       throw error;
     }
 
-    console.log(`[OTP] Sent verification code for appointment ${appointmentNumber}`);
-
     return res.json({
       success: true,
       precheckId,
       maskedMobile: maskMobileNumber(normalizedMobile),
       linkHash,
       expiresIn: OTP_SECURITY_CONFIG.otpTtlMs,
+      resendCooldownSeconds: Math.round(OTP_SECURITY_CONFIG.resendCooldownMs / 1000),
       appointmentHint: appointmentNumber ? `****${String(appointmentNumber).slice(-4)}` : null
     });
   } catch (error) {
-    console.error('❌ Consultation precheck failed:', error.message);
     return res.status(500).json({
       success: false,
       error: 'precheck_failed',
@@ -1484,8 +1482,6 @@ app.post('/api/consultation/verify-otp', async (req, res) => {
       expiresAt
     });
 
-    console.log(`[OTP] Verified appointment ${session.appointmentNumber}`);
-
     return res.json({
       success: true,
       token: accessToken,
@@ -1494,7 +1490,6 @@ app.post('/api/consultation/verify-otp', async (req, res) => {
       appointmentHint: session.appointmentNumber ? `****${String(session.appointmentNumber).slice(-4)}` : null
     });
   } catch (error) {
-    console.error('❌ Consultation OTP verification failed:', error.message);
     return res.status(500).json({
       success: false,
       error: 'otp_verification_failed',
