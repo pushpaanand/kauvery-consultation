@@ -730,6 +730,7 @@ async function sendOtpSms({ mobile, otpCode, appointmentNumber }) {
   const sourceAddress = OTP_SECURITY_CONFIG.smsSourceAddress;
 
   if (!username || !password) {
+    console.error('[OTP] SMS config missing: OTP_SMS_USER/OTP_SMS_CUSTOMER_ID and OTP_SMS_PASSWORD must be set in .env');
     throw new Error('SMS configuration incomplete. Check server environment variables.');
   }
 
@@ -760,6 +761,9 @@ kauvery hospital`;
     const https = require('https');
     const agent = new https.Agent({ rejectUnauthorized: false });
 
+    console.log('[OTP] Sending SMS to:', formattedMobile.replace(/(\d{4})\d{2}(\d{4})/, '$1****$2'), '| URL:', smsUrl);
+    console.log('[OTP] Payload (OTP redacted):', JSON.stringify({ ...payload, message: '[REDACTED]' }));
+
     const response = await axios.post(smsUrl, payload, {
       headers: {
         'Authorization': finalAuth,
@@ -770,6 +774,7 @@ kauvery hospital`;
     });
 
     const resp = response.data;
+    console.log('[OTP] SMS API response:', response.status, JSON.stringify(resp));
 
     // Airtel may return 200 with error in body (e.g. DLT rejection, invalid template)
     const hasError = resp && (
@@ -779,13 +784,21 @@ kauvery hospital`;
       (resp.message && typeof resp.message === 'string' && resp.message.toLowerCase().includes('fail'))
     );
     if (hasError) {
+      console.error('[OTP] SMS provider reported failure:', JSON.stringify(resp));
       throw new Error(`SMS delivery failed: ${JSON.stringify(resp)}`);
     }
 
+    console.log('[OTP] SMS sent successfully to', formattedMobile.replace(/(\d{4})\d{2}(\d{4})/, '$1****$2'));
     return { delivered: true, providerResponse: resp };
 
   } catch (error) {
     const apiMessage = error.response?.data?.detail || error.response?.data?.message || error.response?.data?.error || error.message;
+    console.error('[OTP] SMS send error:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+      code: error.code
+    });
     throw new Error(`Failed to send OTP: ${apiMessage}`);
   }
 }
@@ -1319,6 +1332,7 @@ function decryptRateLimit(req, res, next) {
 app.post('/api/consultation/precheck', async (req, res) => {
   try {
     const { mobile, params } = req.body || {};
+    console.log('[OTP] Precheck request received for mobile:', mobile ? String(mobile).replace(/(\d{4})\d{4}(\d{2})/, '$1****$2') : 'empty');
     if (!params || typeof params !== 'object') {
       return res.status(400).json({
         success: false,
@@ -1356,6 +1370,7 @@ app.post('/api/consultation/precheck', async (req, res) => {
     const normalizedMobile = String(mobile).trim();
     const isValid = await verifyAppointmentMobile(appointmentNumber, normalizedMobile);
     if (!isValid) {
+      console.log('[OTP] Precheck: CRM mobile mismatch for app', appointmentNumber);
       return res.status(400).json({
         success: false,
         error: 'mobile_mismatch',
@@ -1371,6 +1386,7 @@ app.post('/api/consultation/precheck', async (req, res) => {
     );
 
     if (recentSession) {
+      console.log('[OTP] Precheck: throttled (resend cooldown) for mobile', maskMobileNumber(normalizedMobile));
       return res.status(429).json({
         success: false,
         error: 'otp_throttled',
@@ -1398,8 +1414,10 @@ app.post('/api/consultation/precheck', async (req, res) => {
 
     try {
       await sendOtpSms({ mobile: normalizedMobile, otpCode, appointmentNumber });
+      console.log('[OTP] Precheck OK: OTP sent for appointment', appointmentNumber, 'to', maskMobileNumber(normalizedMobile));
     } catch (error) {
       otpSessionStore.delete(precheckId);
+      console.error('[OTP] Precheck failed - SMS send error:', error.message, '| appointment:', appointmentNumber, '| mobile:', maskMobileNumber(normalizedMobile));
       throw error;
     }
 
@@ -1413,6 +1431,7 @@ app.post('/api/consultation/precheck', async (req, res) => {
       appointmentHint: appointmentNumber ? `****${String(appointmentNumber).slice(-4)}` : null
     });
   } catch (error) {
+    console.error('[OTP] Precheck endpoint error:', error.message);
     return res.status(500).json({
       success: false,
       error: 'precheck_failed',
@@ -1482,6 +1501,7 @@ app.post('/api/consultation/verify-otp', async (req, res) => {
       expiresAt
     });
 
+    console.log('[OTP] Verified successfully for appointment', session.appointmentNumber);
     return res.json({
       success: true,
       token: accessToken,
@@ -1490,6 +1510,7 @@ app.post('/api/consultation/verify-otp', async (req, res) => {
       appointmentHint: session.appointmentNumber ? `****${String(session.appointmentNumber).slice(-4)}` : null
     });
   } catch (error) {
+    console.error('[OTP] Verify-OTP endpoint error:', error.message);
     return res.status(500).json({
       success: false,
       error: 'otp_verification_failed',
