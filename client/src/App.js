@@ -32,6 +32,7 @@ function App() {
   const [resendCooldownRemaining, setResendCooldownRemaining] = useState(0);
   const [isOtpInputFocused, setIsOtpInputFocused] = useState(false);
   const otpInputRef = useRef(null);
+  const postOtpDecryptStartedRef = useRef(false);
 
   // Environment validation function
   const validateEnvironment = () => {
@@ -402,6 +403,29 @@ function App() {
           PLEASE ALLOW CAMERA AND MICROPHONE ACCESS WHEN PROMPTED.
         </p>
 
+        {encryptedParams && (
+          <button
+            type="button"
+            onClick={() => processMultipleEncryptedParams(encryptedParams)}
+            style={{
+              width: '100%',
+              marginTop: '24px',
+              background: 'linear-gradient(135deg, #962067, #e91e63)',
+              color: 'white',
+              border: 'none',
+              padding: '14px 24px',
+              borderRadius: '12px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: '700',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 2px 8px rgba(150, 32, 103, 0.25)'
+            }}
+          >
+            Enter video room
+          </button>
+        )}
+
         <div style={{ marginTop: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
           <div style={{ width: '40px', height: '1px', background: '#eee' }}></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#bbb', fontSize: '10px', fontWeight: '700', letterSpacing: '0.5px' }}>
@@ -504,6 +528,7 @@ function App() {
     setLinkHash('');
     setPrecheckId(null);
     setOtpInput('');
+    postOtpDecryptStartedRef.current = false;
   };
 
   // Function to decrypt encoded ID parameter by calling Express server
@@ -670,6 +695,8 @@ function App() {
 
   // Add new function to decrypt multiple parameters using batch endpoint
   const processMultipleEncryptedParams = async (params) => {
+    if (postOtpDecryptStartedRef.current) return;
+    postOtpDecryptStartedRef.current = true;
     try {
       setIsDecrypting(true);
       setDecryptionError(null);
@@ -736,7 +763,6 @@ function App() {
       setIsTokenValid(true);
       setDecryptionComplete(true);
       setIsDecrypting(false);
-      
     } catch (error) {
       if (error.code === 'CONSULTATION_ACCESS_DENIED') {
         clearConsultationSession();
@@ -746,11 +772,13 @@ function App() {
         setDecryptionComplete(false);
         setIsTokenValid(false);
         setDecryptionError(null);
+        postOtpDecryptStartedRef.current = false;
         return;
       }
       setDecryptionError(error.message);
       setIsDecrypting(false);
       setIsTokenValid(false);
+      postOtpDecryptStartedRef.current = false;
     }
   };
 
@@ -811,7 +839,10 @@ function App() {
   };
 
   const handleVerifyOtp = async (event) => {
-    event?.preventDefault();
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
     if (!precheckId) {
       setOtpError('OTP session expired. Please request a new OTP.');
       return;
@@ -843,6 +874,10 @@ function App() {
       setOtpStep('verified');
       setOtpError('');
       setOtpInput('');
+      // Explicitly run post-OTP flow so we enter the consultation (don't rely only on useEffect)
+      if (encryptedParams) {
+        processMultipleEncryptedParams(encryptedParams);
+      }
     } catch (error) {
       setOtpError(error.message || 'OTP verification failed. Please try again.');
     } finally {
