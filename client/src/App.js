@@ -270,6 +270,7 @@ function App() {
           <button
             type="submit"
             disabled={otpLoading || otpInput.length < 6}
+            onClick={() => console.log('[Consultation] Join button clicked (submit will follow)')}
             style={{
               width: '100%',
               background: (otpLoading || otpInput.length < 6) ? '#b0b0b0' : '#962067',
@@ -464,10 +465,16 @@ function App() {
     }
   }, []);
 
+  // Use relative path when no explicit server URL (production build) so API always hits same origin
   const getServerUrl = () => {
-    return process.env.REACT_APP_SERVER_URL || 
-           window.location.origin || 
-           'https://kauverytelehealth.kauverykonnect.com';
+    const env = process.env.REACT_APP_SERVER_URL || '';
+    if (env && typeof env === 'string' && env.startsWith('http')) return env.replace(/\/$/, '');
+    return '';
+  };
+
+  const apiUrl = (path) => {
+    const base = getServerUrl();
+    return base ? `${base}${path.startsWith('/') ? path : '/' + path}` : path;
   };
 
   const sanitizeMobileInput = (value = '') => value.replace(/\D/g, '').slice(0, 10);
@@ -534,10 +541,7 @@ function App() {
   // Function to decrypt encoded ID parameter by calling Express server
   const decryptParameter = async (encodedText) => {
     try {
-      const serverUrl = getServerUrl();
-      const apiEndpoint = `${serverUrl}/api/decrypt`;
-      
-      const response = await fetch(apiEndpoint, {
+      const response = await fetch(apiUrl('/api/decrypt'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -627,23 +631,19 @@ function App() {
   // Batch decrypt function - Decrypt multiple parameters in a single request
   const batchDecryptParameters = async (paramMap) => {
     try {
-      const serverUrl = getServerUrl();
       const consultationToken = sessionStorage.getItem('consultationAccessToken');
       const consultationLinkHash = sessionStorage.getItem('consultationLinkHash');
       const secureEndpointEnabled = Boolean(consultationToken && consultationLinkHash);
-      const apiEndpoint = secureEndpointEnabled 
-        ? `${serverUrl}/api/consultation/decrypt/batch`
-        : `${serverUrl}/api/decrypt/batch`;
-      
-      // Prepare batch request - map parameter keys to encrypted texts
+      const apiEndpoint = apiUrl(secureEndpointEnabled ? '/api/consultation/decrypt/batch' : '/api/decrypt/batch');
+
       const texts = Object.entries(paramMap)
-        .filter(([key, value]) => value) // Only include non-empty values
+        .filter(([key, value]) => value)
         .map(([key, value]) => ({ key, text: value }));
-      
+
       if (texts.length === 0) {
         return {};
       }
-      
+
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
@@ -656,6 +656,7 @@ function App() {
       
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('[Consultation] Batch decrypt failed:', response.status, errorText);
         if (response.status === 401 || response.status === 403) {
           const authError = new Error('Verification expired. Please request a new OTP.');
           authError.code = 'CONSULTATION_ACCESS_DENIED';
@@ -663,9 +664,15 @@ function App() {
         }
         throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
-      
-      const data = await response.json();
-      
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseErr) {
+        console.error('[Consultation] Batch decrypt: invalid JSON response');
+        throw new Error('Invalid server response. Please try again.');
+      }
+
       if (!data.success) {
         throw new Error(data.message || 'Batch decryption failed');
       }
@@ -689,6 +696,7 @@ function App() {
       
       return decryptedData;
     } catch (error) {
+      console.error('[Consultation] batchDecryptParameters error:', error.message, error);
       throw error;
     }
   };
@@ -775,6 +783,7 @@ function App() {
         postOtpDecryptStartedRef.current = false;
         return;
       }
+      console.error('[Consultation] processMultipleEncryptedParams error:', error.message, error);
       setDecryptionError(error.message);
       setIsDecrypting(false);
       setIsTokenValid(false);
@@ -790,8 +799,7 @@ function App() {
     setOtpLoading(true);
     setOtpError('');
     try {
-      const serverUrl = getServerUrl();
-      const response = await fetch(`${serverUrl}/api/consultation/precheck`, {
+      const response = await fetch(apiUrl('/api/consultation/precheck'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -843,8 +851,10 @@ function App() {
       event.preventDefault();
       event.stopPropagation();
     }
+    console.log('[Consultation] Join Consultation Room clicked');
     if (!precheckId) {
       setOtpError('OTP session expired. Please request a new OTP.');
+      console.warn('[Consultation] No precheckId');
       return;
     }
     if (!otpInput || otpInput.length < 6) {
@@ -853,9 +863,10 @@ function App() {
     }
     setOtpLoading(true);
     setOtpError('');
+    const verifyUrl = apiUrl('/api/consultation/verify-otp');
     try {
-      const serverUrl = getServerUrl();
-      const response = await fetch(`${serverUrl}/api/consultation/verify-otp`, {
+      console.log('[Consultation] Verifying OTP at', verifyUrl);
+      const response = await fetch(verifyUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -863,8 +874,15 @@ function App() {
           otp: otpInput
         })
       });
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseErr) {
+        console.error('[Consultation] verify-otp: response not JSON. Status:', response.status, parseErr?.message);
+        throw new Error('Server returned an invalid response. Please try again.');
+      }
       if (!response.ok || !data.success) {
+        console.error('[Consultation] verify-otp failed:', response.status, data);
         throw new Error(data.message || 'Invalid OTP. Please try again.');
       }
 
@@ -874,11 +892,12 @@ function App() {
       setOtpStep('verified');
       setOtpError('');
       setOtpInput('');
-      // Explicitly run post-OTP flow so we enter the consultation (don't rely only on useEffect)
+      console.log('[Consultation] OTP verified, starting post-OTP flow');
       if (encryptedParams) {
         processMultipleEncryptedParams(encryptedParams);
       }
     } catch (error) {
+      console.error('[Consultation] handleVerifyOtp error:', error.message, error);
       setOtpError(error.message || 'OTP verification failed. Please try again.');
     } finally {
       setOtpLoading(false);
