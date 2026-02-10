@@ -69,18 +69,21 @@ app.disable('x-powered-by');
 
 
 // Database configuration for Azure SQL Database
+// Increase timeouts for production (Azure can be slow; default was 15000ms)
+const dbConnectionTimeout = parseInt(process.env.DB_CONNECTION_TIMEOUT_MS, 10) || 60000;
+const dbRequestTimeout = parseInt(process.env.DB_REQUEST_TIMEOUT_MS, 10) || 60000;
 const dbConfig = {
   server: process.env.DB_SERVER || '',
   database: process.env.DB_NAME || '',
-  user: process.env.DB_USER || '', // Updated username
-  password: process.env.DB_PASSWORD || '', // Updated password
+  user: process.env.DB_USER || '',
+  password: process.env.DB_PASSWORD || '',
   port: parseInt(process.env.DB_PORT) || 1433,
+  connectionTimeout: dbConnectionTimeout,
+  requestTimeout: dbRequestTimeout,
   options: {
     encrypt: true,
     trustServerCertificate: false,
     enableArithAbort: true,
-    connectionTimeout: 30000,
-    requestTimeout: 30000,
     pool: {
       max: 10,
       min: 0,
@@ -571,7 +574,8 @@ const OTP_SECURITY_CONFIG = {
   smsMessageType: process.env.OTP_SMS_MESSAGE_TYPE || 'SERVICE_IMPLICIT',
   smsBasicAuth: process.env.OTP_SMS_BASIC_AUTH || '',
   smsEnableUrlShortener: (process.env.OTP_SMS_ENABLE_SHORT_URL || 'false').toLowerCase() === 'true',
-  smsMessage: process.env.OTP_SMS_MESSAGE || 'Welcome! Use OTP {#var#} to verify your identity and join your Teleconsultation video session.\n\nThis code is confidential and valid for a short time only.\n\nkauvery hospital'
+  smsMessage: process.env.OTP_SMS_MESSAGE || 'Welcome! Use OTP {#var#} to verify your identity and join your Teleconsultation video session.\n\nThis code is confidential and valid for a short time only.\n\nkauvery hospital',
+  smsTimeoutMs: parseInt(process.env.OTP_SMS_TIMEOUT_MS, 10) || 30000
 };
 
 const CONSULTATION_ACCESS_ENABLED = (process.env.ENABLE_CONSULTATION_ACCESS || 'true').toLowerCase() === 'true';
@@ -770,7 +774,7 @@ kauvery hospital`;
         'Content-Type': 'application/json'
       },
       httpsAgent: agent,
-      timeout: 10000
+      timeout: OTP_SECURITY_CONFIG.smsTimeoutMs
     });
 
     const resp = response.data;
