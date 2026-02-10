@@ -100,7 +100,13 @@ const corsOptions = {
       'https://videoconsultation-fsb6dbejh3c9htfn.canadacentral-01.azurewebsites.net',
       'http://localhost:3000',
       'https://localhost:3000',
-      'https://kauverytelehealth.kauverykonnect.com'
+      'https://kauverytelehealth.kauverykonnect.com',
+      'wss://weblogger-wss.coolbcloud.com/zglog/ws',
+      'https://*.azurewebsites.net',
+      'wss://*.azurewebsites.net',
+      'https://*.zego.im',
+      'wss://*.zego.im https://*.zegocloud.com',
+      'wss://*.zegocloud.com https://*.kauverykonnect.com',
     ];
     
     // Allow requests with no origin (like mobile apps or curl requests)
