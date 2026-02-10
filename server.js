@@ -106,7 +106,7 @@ const corsOptions = {
       'wss://*.azurewebsites.net',
       'https://*.zego.im',
       'wss://*.zego.im https://*.zegocloud.com',
-      'wss://*.zegocloud.com https://*.kauverykonnect.com',
+      'wss://*.zegocloud.com', 'https://*.kauverykonnect.com',
     ];
     
     // Allow requests with no origin (like mobile apps or curl requests)
@@ -366,8 +366,13 @@ app.use((req, res, next) => {
     
     // Connect - allow API calls to same origin, Azure backend, and Zego Cloud services
     // WebSocket connections needed for real-time video communication
-    "connect-src 'self' https://*.azurewebsites.net wss://*.azurewebsites.net https://*.zego.im wss://*.zego.im https://*.zegocloud.com wss://*.zegocloud.com https://*.kauverykonnect.com",
-    
+    // "connect-src 'self' https://*.azurewebsites.net wss://*.azurewebsites.net https://*.zego.im wss://*.zego.im https://*.zegocloud.com wss://*.zegocloud.com https://*.kauverykonnect.com",
+    "connect-src 'self' \
+ https://*.azurewebsites.net wss://*.azurewebsites.net \
+ https://*.zego.im wss://*.zego.im \
+ https://*.zegocloud.com wss://*.zegocloud.com \
+ https://*.coolzcloud.com wss://*.coolzcloud.com \
+ https://*.kauverykonnect.com",
     // Frame ancestors - prevent clickjacking (only allow same origin)
     "frame-ancestors 'self'",
     
