@@ -366,7 +366,17 @@ app.use((req, res, next) => {
     
     // Connect - allow API calls to same origin, Azure backend, and Zego Cloud services
     // Zego uses multiple backend domains: coolzcloud, coolbcloud, coolgcloud (note spelling)
-    "connect-src 'self' https://*.azurewebsites.net wss://*.azurewebsites.net https://*.zego.im wss://*.zego.im https://*.zegocloud.com wss://*.zegocloud.com https://*.coolzcloud.com wss://*.coolzcloud.com https://*.coolbcloud.com wss://*.coolbcloud.com https://*.coolgcloud.com wss://*.coolgcloud.com https://*.kauverykonnect.com",
+    // "connect-src 'self' https://*.azurewebsites.net wss://*.azurewebsites.net https://*.zego.im wss://*.zego.im https://*.zegocloud.com wss://*.zegocloud.com https://*.coolzcloud.com wss://*.coolzcloud.com https://*.coolbcloud.com wss://*.coolbcloud.com https://*.coolgcloud.com wss://*.coolgcloud.com https://*.kauverykonnect.com",
+    "connect-src 'self' \
+ https://*.azurewebsites.net wss://*.azurewebsites.net \
+ https://*.zego.im wss://*.zego.im \
+ https://*.zegocloud.com wss://*.zegocloud.com \
+ https://*.coolzcloud.com wss://*.coolzcloud.com \
+ https://*.coolbcloud.com wss://*.coolbcloud.com \
+ https://*.coolgcloud.com wss://*.coolgcloud.com \
+ https://*.coolccloud.com wss://*.coolccloud.com \
+ https://*.coolfcloud.com wss://*.coolfcloud.com \
+ https://*.kauverykonnect.com",
     // Frame ancestors - prevent clickjacking (only allow same origin)
     "frame-ancestors 'self'",
     
