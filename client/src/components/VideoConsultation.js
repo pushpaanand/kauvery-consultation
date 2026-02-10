@@ -8,8 +8,33 @@ import AppointmentService from '../utils/appointmentService';
 import { theme } from '../theme/colors';
 import ZegoUIKitPrebuilt from '@zegocloud/zego-uikit-prebuilt';
 
-// Helper function to get Zego credentials from environment variables
+// Runtime Zego config cache (for production where REACT_APP_* are not in the client bundle)
+let cachedZegoConfig = null;
+
+// Fetch Zego config from server at runtime (used when env vars are not baked in at build time, e.g. Azure App Service)
+const ensureZegoConfig = async () => {
+  if (cachedZegoConfig && cachedZegoConfig.appId && cachedZegoConfig.serverSecret) return cachedZegoConfig;
+  if (process.env.REACT_APP_ZEGO_APP_ID && process.env.REACT_APP_ZEGO_SERVER_SECRET) {
+    cachedZegoConfig = {
+      appId: process.env.REACT_APP_ZEGO_APP_ID,
+      serverSecret: process.env.REACT_APP_ZEGO_SERVER_SECRET
+    };
+    return cachedZegoConfig;
+  }
+  const base = (process.env.REACT_APP_SERVER_URL || '').replace(/\/$/, '');
+  const url = base ? `${base}/api/config/zego` : '/api/config/zego';
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success || !data.appId || !data.serverSecret) {
+    throw new Error(data.error || 'Failed to load Zego configuration from server.');
+  }
+  cachedZegoConfig = { appId: data.appId, serverSecret: data.serverSecret };
+  return cachedZegoConfig;
+};
+
+// Helper function to get Zego credentials (build-time env or runtime cache)
 const getZegoCredentials = () => {
+  if (cachedZegoConfig) return cachedZegoConfig;
   return {
     appId: process.env.REACT_APP_ZEGO_APP_ID,
     serverSecret: process.env.REACT_APP_ZEGO_SERVER_SECRET
@@ -2476,11 +2501,12 @@ const VideoConsultation = () => {
 
       setInitializationError(null);
 
-      // Check Zego credentials first
+      // Load Zego config from server at runtime if not in build (e.g. Azure App Service env vars)
+      await ensureZegoConfig();
       const { appId: appID, serverSecret } = getZegoCredentials();
-      
+
       if (!appID || !serverSecret) {
-        throw new Error('Zego credentials are missing. Please check your environment variables.');
+        throw new Error('Zego credentials are missing. Please check your environment variables (or Application Settings in Azure).');
       }
 
       // Convert appID to number (Zego requires number, not string)

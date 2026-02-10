@@ -2075,6 +2075,19 @@ app.get('/api/security/sql-injection-top-ips', async (req, res) => {
 //   console.log(`🚀 Server running on port ${PORT}`);
 //   console.log(`📊 Database connected: ${dbConfig.database}`);
 // });
+// Zego config endpoint - exposes credentials from server env at runtime (for Azure/production where REACT_APP_* are not baked into client build)
+app.get('/api/config/zego', (req, res) => {
+  const appId = process.env.REACT_APP_ZEGO_APP_ID || process.env.ZEGO_APP_ID;
+  const serverSecret = process.env.REACT_APP_ZEGO_SERVER_SECRET || process.env.ZEGO_SERVER_SECRET;
+  if (!appId || !serverSecret) {
+    return res.status(503).json({
+      success: false,
+      error: 'Zego credentials are not configured on the server. Set REACT_APP_ZEGO_APP_ID and REACT_APP_ZEGO_SERVER_SECRET (or ZEGO_APP_ID and ZEGO_SERVER_SECRET) in Application Settings.'
+    });
+  }
+  res.json({ success: true, appId, serverSecret });
+});
+
 // Health check endpoint - should be accessible even if other things fail
 app.get('/health', (req, res) => {
   res.json({ 
