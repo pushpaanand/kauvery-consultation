@@ -2090,17 +2090,53 @@ app.get('/api/security/sql-injection-top-ips', async (req, res) => {
 //   console.log(`🚀 Server running on port ${PORT}`);
 //   console.log(`📊 Database connected: ${dbConfig.database}`);
 // });
-// Zego config endpoint - exposes credentials from server env at runtime (for Azure/production where REACT_APP_* are not baked into client build)
-app.get('/api/config/zego', (req, res) => {
-  const appId = process.env.REACT_APP_ZEGO_APP_ID || process.env.ZEGO_APP_ID;
+// Zego token endpoint - server generates token only; ServerSecret never sent to client (VAPT)
+let generateToken04;
+try {
+  generateToken04 = require('./utils/zegoServerAssistant').generateToken04;
+} catch (e) {
+  generateToken04 = null;
+}
+
+app.post('/api/zego-token', (req, res) => {
+  if (!generateToken04) {
+    return res.status(503).json({ success: false, error: 'Zego token generator not available.' });
+  }
+  const appIdRaw = process.env.REACT_APP_ZEGO_APP_ID || process.env.ZEGO_APP_ID;
   const serverSecret = process.env.REACT_APP_ZEGO_SERVER_SECRET || process.env.ZEGO_SERVER_SECRET;
-  if (!appId || !serverSecret) {
+  if (!appIdRaw || !serverSecret) {
     return res.status(503).json({
       success: false,
-      error: 'Zego credentials are not configured on the server. Set REACT_APP_ZEGO_APP_ID and REACT_APP_ZEGO_SERVER_SECRET (or ZEGO_APP_ID and ZEGO_SERVER_SECRET) in Application Settings.'
+      error: 'Zego credentials are not configured on the server.'
     });
   }
-  res.json({ success: true, appId, serverSecret });
+  const appId = parseInt(appIdRaw, 10);
+  if (isNaN(appId)) {
+    return res.status(500).json({ success: false, error: 'Invalid Zego App ID.' });
+  }
+  const { roomID, userID, userName } = req.body || {};
+  if (!roomID || !userID) {
+    return res.status(400).json({ success: false, error: 'roomID and userID are required.' });
+  }
+  const secretBuf = Buffer.from(serverSecret, 'utf8');
+  if (secretBuf.length !== 32) {
+    return res.status(500).json({
+      success: false,
+      error: 'Zego ServerSecret must be exactly 32 bytes. Check Application Settings.'
+    });
+  }
+  const effectiveTimeInSeconds = 3600;
+  const payload = JSON.stringify({
+    room_id: String(roomID),
+    privilege: { 1: 1, 2: 1 },
+    stream_id_list: null
+  });
+  try {
+    const token = generateToken04(appId, String(userID), serverSecret, effectiveTimeInSeconds, payload);
+    res.json({ success: true, token, appId });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Token generation failed.' });
+  }
 });
 
 // Health check endpoint - should be accessible even if other things fail

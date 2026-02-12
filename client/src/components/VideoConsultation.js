@@ -8,37 +8,20 @@ import AppointmentService from '../utils/appointmentService';
 import { theme } from '../theme/colors';
 import ZegoUIKitPrebuilt from '@zegocloud/zego-uikit-prebuilt';
 
-// Runtime Zego config cache (for production where REACT_APP_* are not in the client bundle)
-let cachedZegoConfig = null;
-
-// Fetch Zego config from server at runtime (used when env vars are not baked in at build time, e.g. Azure App Service)
-const ensureZegoConfig = async () => {
-  if (cachedZegoConfig && cachedZegoConfig.appId && cachedZegoConfig.serverSecret) return cachedZegoConfig;
-  if (process.env.REACT_APP_ZEGO_APP_ID && process.env.REACT_APP_ZEGO_SERVER_SECRET) {
-    cachedZegoConfig = {
-      appId: process.env.REACT_APP_ZEGO_APP_ID,
-      serverSecret: process.env.REACT_APP_ZEGO_SERVER_SECRET
-    };
-    return cachedZegoConfig;
-  }
+// Fetch Zego kit token from server only; ServerSecret never sent to client (VAPT)
+const fetchZegoKitToken = async (roomID, userID, userName) => {
   const base = (process.env.REACT_APP_SERVER_URL || '').replace(/\/$/, '');
-  const url = base ? `${base}/api/config/zego` : '/api/config/zego';
-  const res = await fetch(url);
+  const url = base ? `${base}/api/zego-token` : '/api/zego-token';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roomID, userID, userName: userName || 'Patient' })
+  });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.success || !data.appId || !data.serverSecret) {
-    throw new Error(data.error || 'Failed to load Zego configuration from server.');
+  if (!res.ok || !data.success || !data.token || data.appId == null) {
+    throw new Error(data.error || 'Failed to get video session token.');
   }
-  cachedZegoConfig = { appId: data.appId, serverSecret: data.serverSecret };
-  return cachedZegoConfig;
-};
-
-// Helper function to get Zego credentials (build-time env or runtime cache)
-const getZegoCredentials = () => {
-  if (cachedZegoConfig) return cachedZegoConfig;
-  return {
-    appId: process.env.REACT_APP_ZEGO_APP_ID,
-    serverSecret: process.env.REACT_APP_ZEGO_SERVER_SECRET
-  };
+  return { token: data.token, appId: data.appId };
 };
 // Error Boundary to catch DOM conflicts
 class VideoErrorBoundary extends Component {
@@ -2501,20 +2484,17 @@ const VideoConsultation = () => {
 
       setInitializationError(null);
 
-      // Load Zego config from server at runtime if not in build (e.g. Azure App Service env vars)
-      await ensureZegoConfig();
-      const { appId: appID, serverSecret } = getZegoCredentials();
-
-      if (!appID || !serverSecret) {
-        throw new Error('Zego credentials are missing. Please check your environment variables (or Application Settings in Azure).');
-      }
-
-      // Convert appID to number (Zego requires number, not string)
-      const numericAppID = parseInt(appID, 10);
+      // Token from server only; no credentials in client (VAPT)
+      const { token, appId } = await fetchZegoKitToken(
+        appointmentData.roomID,
+        appointmentData.userid,
+        appointmentData.username || 'Patient'
+      );
+      const numericAppID = parseInt(appId, 10);
       if (isNaN(numericAppID)) {
-        throw new Error(`Invalid appID: ${appID}. Must be a valid number.`);
+        throw new Error('Invalid video session configuration.');
       }
-      // Try different import approaches
+
       let ZegoUIKitPrebuilt;
       try {
         const zegoModule = await import('@zegocloud/zego-uikit-prebuilt');
@@ -2522,45 +2502,35 @@ const VideoConsultation = () => {
       } catch (importError) {
         throw new Error(`Failed to import ZegoUIKitPrebuilt: ${importError.message}`);
       }
-      
+
       if (!ZegoUIKitPrebuilt) {
         throw new Error('ZegoUIKitPrebuilt is undefined after import');
       }
-      
-      // Try different token generation methods
+
       let kitToken;
-      if (ZegoUIKitPrebuilt.generateKitTokenForTest) {
-        kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(
-          numericAppID, 
-          serverSecret, 
-          appointmentData.roomID, 
-          appointmentData.userid, 
-          appointmentData.username || 'Patient' // Add fallback
-        );
-      } else if (ZegoUIKitPrebuilt.generateKitToken) {
-        kitToken = ZegoUIKitPrebuilt.generateKitToken(
-          numericAppID, 
-          serverSecret, 
-          appointmentData.roomID, 
-          appointmentData.userid, 
-          appointmentData.username || 'Patient' // Add fallback
+      if (ZegoUIKitPrebuilt.generateKitTokenForProduction) {
+        kitToken = ZegoUIKitPrebuilt.generateKitTokenForProduction(
+          numericAppID,
+          token,
+          appointmentData.roomID,
+          appointmentData.userid,
+          appointmentData.username || 'Patient'
         );
       } else {
-        throw new Error('No token generation method found in ZegoUIKitPrebuilt');
+        throw new Error('Video session requires generateKitTokenForProduction.');
       }
-      
+
       if (!ZegoUIKitPrebuilt.create) {
         throw new Error('ZegoUIKitPrebuilt.create method is not available');
       }
-      
-      // Try creating the instance with different approaches
+
       let zp;
       try {
         zp = ZegoUIKitPrebuilt.create(kitToken);
       } catch (createError) {
         throw new Error(`Failed to create Zego instance: ${createError.message}`);
       }
-      
+
       if (!zp) {
         throw new Error('Failed to create Zego instance - zp is undefined');
       }

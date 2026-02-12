@@ -34,11 +34,9 @@ function App() {
   const otpInputRef = useRef(null);
   const postOtpDecryptStartedRef = useRef(false);
 
-  // Environment validation function
+  // Environment validation function (Zego credentials are server-only; client gets token via /api/zego-token)
   const validateEnvironment = () => {
     const required = [
-      'REACT_APP_ZEGO_APP_ID',
-      'REACT_APP_ZEGO_SERVER_SECRET',
       'REACT_APP_DECRYPTION_KEY',
       'REACT_APP_SERVER_URL'
     ];
