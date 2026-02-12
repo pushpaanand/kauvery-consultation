@@ -219,7 +219,7 @@ function ensureCookieSameSite(cookieString, isSecure = true) {
 }
 
 // Security: Remove Server header and add security headers including Content Security Policy
-// This middleware aggressively removes server disclosure headers that IIS sets
+// App runs on Azure App Service (Linux) with Node.js/Express — no IIS. Headers below prevent version disclosure.
 app.use((req, res, next) => {
   // Store original methods to intercept headers
   const originalSetHeader = res.setHeader.bind(res);
@@ -2118,13 +2118,19 @@ app.post('/api/zego-token', (req, res) => {
   if (!roomID || !userID) {
     return res.status(400).json({ success: false, error: 'roomID and userID are required.' });
   }
-  const secretBuf = Buffer.from(serverSecret, 'utf8');
-  if (secretBuf.length !== 32) {
+  // Normalize secret: trim and strip quotes (Azure env vars can add newlines/quotes)
+  let secret = typeof serverSecret === 'string' ? serverSecret.trim() : '';
+  if (secret.length >= 2 && (secret.startsWith('"') && secret.endsWith('"') || secret.startsWith("'") && secret.endsWith("'"))) {
+    secret = secret.slice(1, -1).trim();
+  }
+  const secretBuf = Buffer.from(secret, 'utf8');
+  if (secretBuf.length < 32) {
     return res.status(500).json({
       success: false,
-      error: 'Zego ServerSecret must be exactly 32 bytes. Check Application Settings.'
+      error: 'Zego ServerSecret must be exactly 32 characters. Current length: ' + secretBuf.length + '. Check Application Settings (no quotes, no extra spaces).'
     });
   }
+  const secretForZego = secretBuf.length === 32 ? secret : secretBuf.slice(0, 32).toString('utf8');
   const effectiveTimeInSeconds = 3600;
   const payload = JSON.stringify({
     room_id: String(roomID),
@@ -2132,9 +2138,10 @@ app.post('/api/zego-token', (req, res) => {
     stream_id_list: null
   });
   try {
-    const token = generateToken04(appId, String(userID), serverSecret, effectiveTimeInSeconds, payload);
+    const token = generateToken04(appId, String(userID), secretForZego, effectiveTimeInSeconds, payload);
     res.json({ success: true, token, appId });
   } catch (err) {
+    console.error('[Zego] Token generation error:', err.message);
     res.status(500).json({ success: false, error: err.message || 'Token generation failed.' });
   }
 });
