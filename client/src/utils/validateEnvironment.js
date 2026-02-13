@@ -30,9 +30,8 @@ function validateEnvironmentVariables() {
   const errors = [];
   const warnings = [];
   
-  // Only check known client env vars (avoids bundling server-only REACT_APP_* like Zego credentials)
+  // Only check non-secret client env (avoids bundling server-only secrets: Zego, decryption key)
   const envVars = [
-    'REACT_APP_DECRYPTION_KEY',
     'REACT_APP_SERVER_URL'
   ].filter(key => typeof process.env[key] === 'string');
 

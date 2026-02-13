@@ -35,11 +35,22 @@ function isPrivateIP(value) {
 }
 
 function checkEnvironmentVariables() {
-  console.log('🔍 Checking environment variables for internal IP addresses...\n');
-  
+  console.log('🔍 Checking environment variables for internal IP addresses and sensitive secrets...\n');
+
+  // VAPT: Fail build if Zego credentials are in build env (they must be server-only)
+  const disallowed = ['REACT_APP_ZEGO_APP_ID', 'REACT_APP_ZEGO_SERVER_SECRET'];
+  const found = disallowed.filter(key => process.env[key]);
+  if (found.length > 0) {
+    console.error('❌ SECURITY ERROR: Sensitive Zego credentials must NOT be in client build!\n');
+    found.forEach(key => console.error(`   Found: ${key}`));
+    console.error('\n   Zego credentials are server-only. Remove these from .env and from CI/CD build environment.');
+    console.error('   Client gets token via POST /api/zego-token. Build aborted.\n');
+    process.exit(1);
+  }
+
   const errors = [];
   const warnings = [];
-  
+
   // Check all REACT_APP_ environment variables
   Object.keys(process.env).forEach(key => {
     if (key.startsWith('REACT_APP_')) {

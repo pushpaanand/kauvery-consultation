@@ -218,6 +218,26 @@ function ensureCookieSameSite(cookieString, isSecure = true) {
   return modifiedCookie;
 }
 
+// Content Security Policy (CSP) - single definition so all responses (HTML + static) can set it (VAPT)
+const CSP_DIRECTIVES = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.zego.im *.zegocloud.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self' blob: mediastream:",
+  "connect-src 'self' https://*.azurewebsites.net wss://*.azurewebsites.net https://*.zego.im wss://*.zego.im https://*.zegocloud.com wss://*.zegocloud.com https://*.coolzcloud.com wss://*.coolzcloud.com https://*.coolbcloud.com wss://*.coolbcloud.com https://*.coolgcloud.com wss://*.coolgcloud.com https://*.coolccloud.com wss://*.coolccloud.com https://*.coolfcloud.com wss://*.coolfcloud.com https://*.kauverykonnect.com",
+  "frame-ancestors 'self'",
+  "form-action 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "upgrade-insecure-requests",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  "child-src 'self' blob:",
+  "frame-src 'self' blob:"
+].join('; ');
+
 // Security: Remove Server header and add security headers including Content Security Policy
 // App runs on Azure App Service (Linux) with Node.js/Express — no IIS. Headers below prevent version disclosure.
 app.use((req, res, next) => {
@@ -342,70 +362,7 @@ app.use((req, res, next) => {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   }
   
-  // Content Security Policy (CSP) - Configured for video consultation application
-  // Allows necessary external resources while maintaining security
-  const cspDirectives = [
-    // Default source - only allow resources from same origin
-    "default-src 'self'",
-    
-    // Scripts - allow inline scripts (React requires this) and same-origin scripts
-    // 'unsafe-inline' is needed for React's bundled code, but we use nonce/hash for production
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' *.zego.im *.zegocloud.com",
-    
-    // Styles - allow same origin, Google Fonts, and inline styles (React needs this)
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    
-    // Fonts - allow Google Fonts and same origin
-    "font-src 'self' https://fonts.gstatic.com data:",
-    
-    // Images - allow same origin, data URIs, and blob URIs (for video thumbnails)
-    "img-src 'self' data: blob: https:",
-    
-    // Media - allow WebRTC and media streams (required for video consultation)
-    "media-src 'self' blob: mediastream:",
-    
-    // Connect - allow API calls to same origin, Azure backend, and Zego Cloud services
-    // Zego uses multiple backend domains: coolzcloud, coolbcloud, coolgcloud (note spelling)
-    // "connect-src 'self' https://*.azurewebsites.net wss://*.azurewebsites.net https://*.zego.im wss://*.zego.im https://*.zegocloud.com wss://*.zegocloud.com https://*.coolzcloud.com wss://*.coolzcloud.com https://*.coolbcloud.com wss://*.coolbcloud.com https://*.coolgcloud.com wss://*.coolgcloud.com https://*.kauverykonnect.com",
-    "connect-src 'self' \
- https://*.azurewebsites.net wss://*.azurewebsites.net \
- https://*.zego.im wss://*.zego.im \
- https://*.zegocloud.com wss://*.zegocloud.com \
- https://*.coolzcloud.com wss://*.coolzcloud.com \
- https://*.coolbcloud.com wss://*.coolbcloud.com \
- https://*.coolgcloud.com wss://*.coolgcloud.com \
- https://*.coolccloud.com wss://*.coolccloud.com \
- https://*.coolfcloud.com wss://*.coolfcloud.com \
- https://*.kauverykonnect.com",
-    // Frame ancestors - prevent clickjacking (only allow same origin)
-    "frame-ancestors 'self'",
-    
-    // Form action - prevent form submission to external sites
-    "form-action 'self'",
-    
-    // Base URI - prevent base tag injection attacks
-    "base-uri 'self'",
-    
-    // Object - disallow plugins (Flash, etc.)
-    "object-src 'none'",
-    
-    // Upgrade insecure requests - force HTTPS
-    "upgrade-insecure-requests",
-    
-    // Worker - allow workers from same origin (if needed)
-    "worker-src 'self' blob:",
-    
-    // Manifest - allow manifest file
-    "manifest-src 'self'",
-    
-    // Child source - for iframes if needed
-    "child-src 'self' blob:",
-    
-    // Frame source - for iframes if needed
-    "frame-src 'self' blob:"
-  ].join('; ');
-  
-  res.setHeader('Content-Security-Policy', cspDirectives);
+  res.setHeader('Content-Security-Policy', CSP_DIRECTIVES);
   
   // Also set report-only version for monitoring (optional - can be enabled for testing)
   // Uncomment below to enable CSP reporting without blocking
@@ -426,12 +383,13 @@ app.use(express.static(path.join(__dirname, "client/build"), {
   etag: false,  // Disable ETags to prevent file inode disclosure
   lastModified: true,  // Keep Last-Modified for caching if needed
   setHeaders: (res, path) => {
-    // Set proper Cache-Control for static assets
-    // Static files (CSS, JS, images) can be cached for 1 year
+    // Ensure CSP on static responses (VAPT: no "missing CSP" for JS/CSS)
+    if (!res.getHeader('Content-Security-Policy')) {
+      res.setHeader('Content-Security-Policy', CSP_DIRECTIVES);
+    }
     if (path.match(/\.(css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     } else {
-      // HTML files and other files should not be cached (they may contain sensitive data)
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
