@@ -4,7 +4,28 @@
 
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+const clientEnvPath = path.join(__dirname, '.env');
+require('dotenv').config({ path: clientEnvPath });
+
+// Parse client .env file only (ignore process.env so root .env / server vars don't fail the build).
+function parseEnvFile(filePath) {
+  const out = {};
+  if (!fs.existsSync(filePath)) return out;
+  const content = fs.readFileSync(filePath, 'utf8');
+  content.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) return;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'")))
+      val = val.slice(1, -1);
+    out[key] = val;
+  });
+  return out;
+}
 
 // Private IP ranges to detect
 const privateIPPatterns = [
@@ -37,13 +58,14 @@ function isPrivateIP(value) {
 function checkEnvironmentVariables() {
   console.log('🔍 Checking environment variables for internal IP addresses and sensitive secrets...\n');
 
-  // VAPT: Fail build if Zego credentials are in build env (they must be server-only)
+  // VAPT: Fail only if client/.env contains Zego credentials (server may keep them in root .env).
+  const clientEnv = parseEnvFile(clientEnvPath);
   const disallowed = ['REACT_APP_ZEGO_APP_ID', 'REACT_APP_ZEGO_SERVER_SECRET'];
-  const found = disallowed.filter(key => process.env[key]);
+  const found = disallowed.filter(key => clientEnv[key]);
   if (found.length > 0) {
     console.error('❌ SECURITY ERROR: Sensitive Zego credentials must NOT be in client build!\n');
-    found.forEach(key => console.error(`   Found: ${key}`));
-    console.error('\n   Zego credentials are server-only. Remove these from .env and from CI/CD build environment.');
+    found.forEach(key => console.error(`   Found in client/.env: ${key}`));
+    console.error('\n   Remove these from client/.env only. Server can keep them in root .env.');
     console.error('   Client gets token via POST /api/zego-token. Build aborted.\n');
     process.exit(1);
   }
