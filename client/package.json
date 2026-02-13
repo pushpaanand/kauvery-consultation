@@ -17,7 +17,10 @@
   "scripts": {
     "start": "react-scripts start",
     "prebuild": "node build-time-ip-check.js",
-    "build": "react-scripts build",
+    "build": "node build-with-clean-env.js",
+    "build:raw": "react-scripts build",
+    "postbuild": "node check-bundle-no-secrets.js",
+    "check-bundle": "node check-bundle-no-secrets.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
