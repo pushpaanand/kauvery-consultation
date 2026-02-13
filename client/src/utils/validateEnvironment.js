@@ -30,9 +30,12 @@ function validateEnvironmentVariables() {
   const errors = [];
   const warnings = [];
   
-  // Check all REACT_APP environment variables
-  const envVars = Object.keys(process.env).filter(key => key.startsWith('REACT_APP_'));
-  
+  // Only check known client env vars (avoids bundling server-only REACT_APP_* like Zego credentials)
+  const envVars = [
+    'REACT_APP_DECRYPTION_KEY',
+    'REACT_APP_SERVER_URL'
+  ].filter(key => typeof process.env[key] === 'string');
+
   envVars.forEach(key => {
     const value = process.env[key];
     
