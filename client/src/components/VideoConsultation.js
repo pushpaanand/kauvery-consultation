@@ -8,13 +8,19 @@ import AppointmentService from '../utils/appointmentService';
 import { theme } from '../theme/colors';
 import ZegoUIKitPrebuilt from '@zegocloud/zego-uikit-prebuilt';
 
-// Fetch Zego kit token from server only; ServerSecret never sent to client (VAPT)
+// Fetch Zego kit token from server only; send consultation token when present (VAPT: server validates OTP).
 const fetchZegoKitToken = async (roomID, userID, userName) => {
   const base = (process.env.REACT_APP_SERVER_URL || '').replace(/\/$/, '');
   const url = base ? `${base}/api/zego-token` : '/api/zego-token';
+  const consultationToken = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('consultationAccessToken') : null;
+  const consultationLinkHash = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('consultationLinkHash') : null;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(consultationToken ? { 'X-Consultation-Token': consultationToken } : {}),
+      ...(consultationLinkHash ? { 'X-Consultation-Link': consultationLinkHash } : {})
+    },
     body: JSON.stringify({ roomID, userID, userName: userName || 'Patient' })
   });
   const data = await res.json().catch(() => ({}));

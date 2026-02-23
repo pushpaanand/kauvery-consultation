@@ -624,13 +624,15 @@ function App() {
     };
   };
 
-  // Batch decrypt function - Decrypt multiple parameters in a single request
-  const batchDecryptParameters = async (paramMap) => {
+  // Batch decrypt. When requireConsultationAuth is true (post-OTP flow), always use consultation
+  // endpoint so server validates OTP session; no fallback to public decrypt (VAPT OTP bypass fix).
+  const batchDecryptParameters = async (paramMap, options = {}) => {
     try {
+      const { requireConsultationAuth = false } = options;
       const consultationToken = sessionStorage.getItem('consultationAccessToken');
       const consultationLinkHash = sessionStorage.getItem('consultationLinkHash');
-      const secureEndpointEnabled = Boolean(consultationToken && consultationLinkHash);
-      const apiEndpoint = apiUrl(secureEndpointEnabled ? '/api/consultation/decrypt/batch' : '/api/decrypt/batch');
+      const useConsultationEndpoint = requireConsultationAuth || Boolean(consultationToken && consultationLinkHash);
+      const apiEndpoint = apiUrl(useConsultationEndpoint ? '/api/consultation/decrypt/batch' : '/api/decrypt/batch');
 
       const texts = Object.entries(paramMap)
         .filter(([key, value]) => value)
@@ -712,8 +714,8 @@ function App() {
       if (params.ad) paramMap.ad = params.ad;
       if (params.at) paramMap.at = params.at;
       
-      // Decrypt all parameters in a single batch request
-      const decryptedData = await batchDecryptParameters(paramMap);
+      // Decrypt via consultation endpoint only; server validates OTP session (prevents response tampering).
+      const decryptedData = await batchDecryptParameters(paramMap, { requireConsultationAuth: true });
       
       // Create appointment data object with all decrypted parameters
       const appointmentData = {

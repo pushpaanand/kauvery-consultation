@@ -870,7 +870,39 @@ function requireConsultationAccess(req, res, next) {
   return next();
 }
 
+// When X-Consultation-Token is sent, validate it (e.g. for /api/zego-token). If not sent, allow.
+function requireConsultationAccessIfSent(req, res, next) {
+  const token = extractConsultationToken(req);
+  if (!token) return next();
+  if (!CONSULTATION_ACCESS_ENABLED) return next();
 
+  const session = consultationAccessStore.get(token);
+  if (!session) {
+    return res.status(401).json({
+      success: false,
+      error: 'consultation_token_invalid',
+      message: 'Consultation access token is invalid or expired'
+    });
+  }
+  if (session.expiresAt <= Date.now()) {
+    consultationAccessStore.delete(token);
+    return res.status(401).json({
+      success: false,
+      error: 'consultation_token_expired',
+      message: 'Consultation access token is invalid or expired'
+    });
+  }
+  const linkHash = req.headers['x-consultation-link'];
+  if (session.linkHash && linkHash !== session.linkHash) {
+    return res.status(403).json({
+      success: false,
+      error: 'consultation_link_mismatch',
+      message: 'Encrypted link verification failed'
+    });
+  }
+  req.consultationSession = session;
+  return next();
+}
 
 // Enhanced appointment storage with MIS tracking
 async function storeAppointment(appointmentData) {
@@ -2056,7 +2088,7 @@ try {
   generateToken04 = null;
 }
 
-app.post('/api/zego-token', (req, res) => {
+app.post('/api/zego-token', requireConsultationAccessIfSent, (req, res) => {
   if (!generateToken04) {
     return res.status(503).json({ success: false, error: 'Zego token generator not available.' });
   }
