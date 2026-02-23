@@ -3,10 +3,10 @@
 
 name: Build and deploy Node.js app to Azure Web App - videoconsultation
 
+# Deploy to videoconsultation (Canada Central). Push trigger disabled until Azure app hostname is valid
+# and GitHub secret AZUREAPPSERVICE_PUBLISHPROFILE_683A7966C1874238A8C424F82AE776B9 is updated.
+# See .github/workflows/README_AZURE_DEPLOY.md for ENOTFOUND fix.
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
 
 jobs:
