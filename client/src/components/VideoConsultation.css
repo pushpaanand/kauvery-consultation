@@ -39,7 +39,7 @@
   animation: pulse 2s infinite;
 }
 
-/* Video consultation page – mobile view (design only; do not override video container size) */
+/* Mobile view – design only; no rules for video container (keeps Zego init working) */
 @media (max-width: 768px) {
   .video-consultation-page {
     min-height: 100dvh;
@@ -47,8 +47,6 @@
   }
   .video-leave-popup {
     padding: 16px !important;
-    align-items: center;
-    justify-content: center;
   }
   .video-leave-popup-content {
     padding: 24px 20px !important;

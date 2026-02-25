@@ -121,7 +121,6 @@ const ZegoVideoInterface = ({ containerRef, isInitialized, initializationError, 
     return (
     <div 
       ref={containerRef}
-      className="zego-video-container"
       style={containerStyle}
     >
       {/* Debug info */}
