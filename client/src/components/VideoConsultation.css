@@ -39,19 +39,11 @@
   animation: pulse 2s infinite;
 }
 
-/* Video consultation page – mobile view */
+/* Video consultation page – mobile view (design only; do not override video container size) */
 @media (max-width: 768px) {
   .video-consultation-page {
     min-height: 100dvh;
     overflow: hidden;
-  }
-  .zego-video-container {
-    margin-top: 56px !important;
-    height: calc(100vh - 56px - 44px) !important;
-    min-height: calc(100dvh - 56px - 44px) !important;
-    max-height: calc(100dvh - 56px - 44px) !important;
-    width: 100% !important;
-    max-width: 100vw !important;
   }
   .video-leave-popup {
     padding: 16px !important;
