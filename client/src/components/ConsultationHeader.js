@@ -6,7 +6,7 @@ import { theme } from '../theme/colors';
  * Slightly dark pink background (#fce4ec).
  */
 const ConsultationHeader = () => (
-  <div style={{
+  <div className="consultation-header" style={{
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',

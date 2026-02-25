@@ -6,7 +6,7 @@ import { theme } from '../theme/colors';
  * Slightly dark pink background (#fce4ec), fixed at bottom.
  */
 const ConsultationFooter = () => (
-  <div style={{
+  <div className="consultation-footer" style={{
     position: 'fixed',
     bottom: 0,
     left: 0,

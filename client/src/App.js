@@ -6,6 +6,7 @@ import ConsultationHeader from "./components/ConsultationHeader";
 import ConsultationFooter from "./components/ConsultationFooter";
 import AppointmentService from "./utils/appointmentService";
 import { theme } from "./theme/colors";
+import "./App.css";
 
 function App() {
   const [token, setToken] = useState("");
@@ -50,7 +51,7 @@ function App() {
   };
 
   const renderOtpMobileScreen = () => (
-    <div style={{
+    <div className="consultation-page" style={{
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -65,7 +66,7 @@ function App() {
       
       {renderDoctorCard()}
 
-      <div style={{
+      <div className="consultation-card" style={{
         background: theme.cardBg,
         borderRadius: '30px',
         padding: '40px',
@@ -156,7 +157,7 @@ function App() {
   );
 
   const renderOtpVerificationScreen = () => (
-    <div style={{
+    <div className="consultation-page" style={{
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -171,7 +172,7 @@ function App() {
       
       {renderDoctorCard()}
 
-      <div style={{
+      <div className="consultation-card" style={{
         background: theme.cardBg,
         borderRadius: '30px',
         padding: '40px',
@@ -192,6 +193,7 @@ function App() {
           </label>
           
           <div
+            className="otp-boxes"
             role="button"
             tabIndex={0}
             onClick={() => otpInputRef.current?.focus()}
@@ -324,7 +326,7 @@ function App() {
   );
 
   const renderVerifiedScreen = () => (
-    <div style={{
+    <div className="consultation-page" style={{
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -339,7 +341,7 @@ function App() {
       
       {renderDoctorCard()}
 
-      <div style={{
+      <div className="consultation-card consultation-card--verified" style={{
         background: theme.cardBg,
         borderRadius: '30px',
         padding: '50px 40px',
@@ -489,7 +491,7 @@ function App() {
 
 
   const renderDoctorCard = () => (
-    <div style={{
+    <div className="consultation-doctor-card" style={{
       background: theme.cardBg,
       borderRadius: '15px',
       padding: '15px 25px',

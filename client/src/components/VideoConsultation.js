@@ -99,36 +99,29 @@ class VideoErrorBoundary extends Component {
 const ZegoVideoInterface = ({ containerRef, isInitialized, initializationError, appointmentData, onRetry, showLeaveRoomPopup, onConfirmLeaveRoom, onCancelLeaveRoom }) => {
   // Use React.useMemo to prevent unnecessary re-renders that might cause DOM conflicts
         const containerStyle = React.useMemo(() => ({
-        width: '100vw', // Full viewport width
-        height: 'calc(100vh - 70px - 40px)', // Full height minus header/footer
-        background: 'white', // White background
-        borderRadius: 0, // No border radius
-        overflow: 'hidden', // Prevent overflow
-        marginTop: '70px', // Top margin for header
-        marginLeft: '0', // No left margin
-        marginRight: '0', // No right margin
+        width: '100vw',
+        height: 'calc(100vh - 70px - 40px)',
+        background: 'white',
+        borderRadius: 0,
+        overflow: 'hidden',
+        marginTop: '70px',
+        marginLeft: 0,
+        marginRight: 0,
         position: 'relative',
-        minHeight: 'calc(100vh - 110px)', // Minimum height
-        maxHeight: 'calc(100vh - 110px)', // Maximum height
+        minHeight: 'calc(100vh - 110px)',
+        maxHeight: 'calc(100vh - 110px)',
         isolation: 'isolate',
-        display: 'block', // Single column layout
-        boxShadow: 'none', // No shadow
-        border: 'none', // No border
-        padding: '0', // No padding
-        // Responsive design for different screen sizes
-        '@media (max-width: 768px)': {
-          marginTop: '60px',
-          height: 'calc(100vh - 60px - 40px)',
-          minHeight: 'calc(100vh - 100px)',
-          maxHeight: 'calc(100vh - 100px)',
-          padding: '0'
-        }
+        display: 'block',
+        boxShadow: 'none',
+        border: 'none',
+        padding: 0
       }), []);
 
   try {
     return (
     <div 
       ref={containerRef}
+      className="zego-video-container"
       style={containerStyle}
     >
       {/* Debug info */}
@@ -153,7 +146,7 @@ const ZegoVideoInterface = ({ containerRef, isInitialized, initializationError, 
 
       {/* Leave Room Popup - Inside video container */}
       {showLeaveRoomPopup && (
-        <div style={{
+        <div className="video-leave-popup" style={{
           position: 'absolute',
           top: 0,
           left: 0,
@@ -166,7 +159,7 @@ const ZegoVideoInterface = ({ containerRef, isInitialized, initializationError, 
           zIndex: 999999,
           padding: '20px'
         }}>
-          <div style={{
+          <div className="video-leave-popup-content" style={{
             background: 'white',
             borderRadius: '16px',
             padding: '32px',
@@ -3615,7 +3608,7 @@ const VideoConsultation = () => {
  
 
   return (
-    <div style={styles.body}>
+    <div className="video-consultation-page" style={styles.body}>
       {/* Header - same as OTP page */}
       <ConsultationHeader />
 
