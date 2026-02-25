@@ -121,6 +121,7 @@ const ZegoVideoInterface = ({ containerRef, isInitialized, initializationError, 
     return (
     <div 
       ref={containerRef}
+      className="zego-video-container"
       style={containerStyle}
     >
       {/* Debug info */}
@@ -2548,6 +2549,7 @@ const VideoConsultation = () => {
             mode: ZegoUIKitPrebuilt.VideoConference,
           },
           showPreJoinView: true, // Restore pre-join view
+          autoHideFooter: false, // Keep mic, speaker, chat visible on mobile (Zego hides footer by default on mobile)
           preJoinViewConfig: {
             title: `Welcome to Kauvery Hospital`,
             titleStyle: {

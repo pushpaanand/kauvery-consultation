@@ -39,11 +39,16 @@
   animation: pulse 2s infinite;
 }
 
-/* Mobile view – design only; no rules for video container (keeps Zego init working) */
+/* Mobile view – design only; no rules that break Zego init */
 @media (max-width: 768px) {
   .video-consultation-page {
     min-height: 100dvh;
     overflow: hidden;
+  }
+  /* Pre-join: allow scroll so Join button is visible; in-call: toolbar kept visible via autoHideFooter: false in JS */
+  .zego-video-container {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
   }
   .video-leave-popup {
     padding: 16px !important;
