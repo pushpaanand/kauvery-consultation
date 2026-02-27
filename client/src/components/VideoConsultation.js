@@ -2548,8 +2548,12 @@ const VideoConsultation = () => {
           scenario: {
             mode: ZegoUIKitPrebuilt.VideoConference,
           },
-          showPreJoinView: true, // Restore pre-join view
-          autoHideFooter: false, // Keep mic, speaker, chat visible on mobile (Zego hides footer by default on mobile)
+          showPreJoinView: true,
+          autoHideFooter: false, // Keep bottom toolbar visible on mobile
+          showMyMicrophoneToggleButton: true,
+          showMyCameraToggleButton: true,
+          showTextChat: true,
+          showScreenSharingButton: true,
           preJoinViewConfig: {
             title: `Welcome to Kauvery Hospital`,
             titleStyle: {

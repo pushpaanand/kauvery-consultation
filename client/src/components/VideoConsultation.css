@@ -45,10 +45,14 @@
     min-height: 100dvh;
     overflow: hidden;
   }
-  /* Pre-join: allow scroll so Join button is visible; in-call: toolbar kept visible via autoHideFooter: false in JS */
+  /* Fit Zego container to visible viewport so bottom toolbar (mic, speaker, chat) is not cut off */
   .zego-video-container {
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
+    margin-top: 56px !important;
+    height: calc(100dvh - 56px - 48px) !important;
+    min-height: calc(100dvh - 56px - 48px) !important;
+    max-height: calc(100dvh - 56px - 48px) !important;
   }
   .video-leave-popup {
     padding: 16px !important;
