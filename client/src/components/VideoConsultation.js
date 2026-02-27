@@ -98,24 +98,30 @@ class VideoErrorBoundary extends Component {
 // Isolated Zego Component to prevent DOM conflicts
 const ZegoVideoInterface = ({ containerRef, isInitialized, initializationError, appointmentData, onRetry, showLeaveRoomPopup, onConfirmLeaveRoom, onCancelLeaveRoom }) => {
   // Use React.useMemo to prevent unnecessary re-renders that might cause DOM conflicts
-        const containerStyle = React.useMemo(() => ({
-        width: '100vw',
-        height: 'calc(100vh - 70px - 40px)',
-        background: 'white',
-        borderRadius: 0,
-        overflow: 'hidden',
-        marginTop: '70px',
-        marginLeft: 0,
-        marginRight: 0,
-        position: 'relative',
-        minHeight: 'calc(100vh - 110px)',
-        maxHeight: 'calc(100vh - 110px)',
-        isolation: 'isolate',
-        display: 'block',
-        boxShadow: 'none',
-        border: 'none',
-        padding: 0
-      }), []);
+  const containerStyle = React.useMemo(() => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+
+    return {
+      width: '100vw',
+      // Give a bit more vertical space on mobile and allow scrolling
+      height: isMobile ? 'calc(100vh - 60px)' : 'calc(100vh - 70px - 40px)',
+      background: 'white',
+      borderRadius: 0,
+      overflowY: 'auto',
+      overflowX: 'hidden',
+      marginTop: '70px',
+      marginLeft: 0,
+      marginRight: 0,
+      position: 'relative',
+      minHeight: isMobile ? 'calc(100vh - 60px)' : 'calc(100vh - 110px)',
+      maxHeight: 'none',
+      isolation: 'isolate',
+      display: 'block',
+      boxShadow: 'none',
+      border: 'none',
+      padding: 0
+    };
+  }, []);
 
   try {
     return (
@@ -1745,7 +1751,9 @@ const VideoConsultation = () => {
         html, body {
           max-width: 100vw !important;
           max-height: 100vh !important;
-          overflow: hidden !important;
+          /* Allow vertical scrolling so mobile users can reach chat and controls */
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
           box-sizing: border-box !important;
         }
 
@@ -1958,7 +1966,21 @@ const VideoConsultation = () => {
         }
 
         @media (max-width: 768px) {
-          /* Tablet and Mobile - Stacked layout */
+          /* Tablet and Mobile - Stacked layout:
+             1. Video container
+             2. Join button (inside Zego pre-join view)
+             3. Consultation details below button
+          */
+
+          /* Make the overall pre-join wrapper a vertical stack */
+          [class*="prejoin"], [class*="Prejoin"], [class*="PreJoin"] {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            width: 100% !important;
+          }
+
           .zego-prejoin-view,
           .zego-prejoin-container,
           .zego-prejoin {
@@ -1970,20 +1992,22 @@ const VideoConsultation = () => {
             justify-content: center !important;
             grid-column: 1 !important;
             grid-row: 1 !important;
+            order: 1 !important; /* Ensure video + join button come first */
           }
           
           .kauvery-participant-info,
           .kauvery-floating-info {
             position: relative !important;
-            margin: 0 !important;
+            margin: 12px auto 0 auto !important;
             width: 95% !important;
-            max-width: 300px !important;
+            max-width: 320px !important;
             z-index: 1 !important;
             font-size: 14px !important;
             align-self: center !important;
             grid-column: 1 !important;
             grid-row: 2 !important;
             justify-self: center !important;
+            order: 2 !important; /* Details strictly below join button */
           }
           
           .kauvery-participant-info h3,
@@ -2789,9 +2813,11 @@ const VideoConsultation = () => {
       fontFamily: "'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       background: theme.pageBg,
       color: colors.kauveryDarkGrey,
-      overflow: 'hidden',
-      height: '100vh',
-      maxHeight: '100vh',
+      // Allow the page to scroll, especially on mobile where
+      // Zego's in-room controls and chat might extend beyond the viewport.
+      overflowX: 'hidden',
+      overflowY: 'auto',
+      minHeight: '100vh',
       margin: 0,
       padding: 0
     },
