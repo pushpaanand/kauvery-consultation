@@ -98,30 +98,24 @@ class VideoErrorBoundary extends Component {
 // Isolated Zego Component to prevent DOM conflicts
 const ZegoVideoInterface = ({ containerRef, isInitialized, initializationError, appointmentData, onRetry, showLeaveRoomPopup, onConfirmLeaveRoom, onCancelLeaveRoom }) => {
   // Use React.useMemo to prevent unnecessary re-renders that might cause DOM conflicts
-  const containerStyle = React.useMemo(() => {
-    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
-
-    return {
-      width: '100vw',
-      // Give a bit more vertical space on mobile and allow scrolling
-      height: isMobile ? 'calc(100vh - 60px)' : 'calc(100vh - 70px - 40px)',
-      background: 'white',
-      borderRadius: 0,
-      overflowY: 'auto',
-      overflowX: 'hidden',
-      marginTop: '70px',
-      marginLeft: 0,
-      marginRight: 0,
-      position: 'relative',
-      minHeight: isMobile ? 'calc(100vh - 60px)' : 'calc(100vh - 110px)',
-      maxHeight: 'none',
-      isolation: 'isolate',
-      display: 'block',
-      boxShadow: 'none',
-      border: 'none',
-      padding: 0
-    };
-  }, []);
+        const containerStyle = React.useMemo(() => ({
+        width: '100vw',
+        height: 'calc(100vh - 70px - 40px)',
+        background: 'white',
+        borderRadius: 0,
+        overflow: 'hidden',
+        marginTop: '70px',
+        marginLeft: 0,
+        marginRight: 0,
+        position: 'relative',
+        minHeight: 'calc(100vh - 110px)',
+        maxHeight: 'calc(100vh - 110px)',
+        isolation: 'isolate',
+        display: 'block',
+        boxShadow: 'none',
+        border: 'none',
+        padding: 0
+      }), []);
 
   try {
     return (
@@ -1751,9 +1745,7 @@ const VideoConsultation = () => {
         html, body {
           max-width: 100vw !important;
           max-height: 100vh !important;
-          /* Allow vertical scrolling so mobile users can reach chat and controls */
-          overflow-x: hidden !important;
-          overflow-y: auto !important;
+          overflow: hidden !important;
           box-sizing: border-box !important;
         }
 
@@ -1966,48 +1958,55 @@ const VideoConsultation = () => {
         }
 
         @media (max-width: 768px) {
-          /* Tablet and Mobile - Stacked layout:
-             1. Video container
-             2. Join button (inside Zego pre-join view)
-             3. Consultation details below button
-          */
-
-          /* Make the overall pre-join wrapper a vertical stack */
-          [class*="prejoin"], [class*="Prejoin"], [class*="PreJoin"] {
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            width: 100% !important;
-          }
-
+          /* Tablet and Mobile - Stacked: container (video) -> button -> details */
           .zego-prejoin-view,
           .zego-prejoin-container,
           .zego-prejoin {
             width: 100% !important;
-            height: 100% !important;
+            min-height: 100% !important;
+            height: auto !important;
             position: relative !important;
             display: flex !important;
+            flex-direction: column !important;
             align-items: center !important;
-            justify-content: center !important;
+            justify-content: flex-start !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
             grid-column: 1 !important;
             grid-row: 1 !important;
-            order: 1 !important; /* Ensure video + join button come first */
           }
-          
+          /* Video preview first, limited height so button and details are visible */
+          .zego-prejoin-view > *:first-child,
+          .zego-prejoin-container > *:first-child,
+          .zego-prejoin > *:first-child {
+            order: 1 !important;
+            flex: 0 1 auto !important;
+            max-height: 45vh !important;
+            width: 100% !important;
+            min-height: 120px !important;
+          }
+          /* Button area second */
+          .zego-prejoin-view > *:not(:first-child):not(.kauvery-participant-info),
+          .zego-prejoin-container > *:not(:first-child):not(.kauvery-participant-info),
+          .zego-prejoin > *:not(:first-child):not(.kauvery-participant-info) {
+            order: 2 !important;
+            flex-shrink: 0 !important;
+          }
+          /* Details (participant info) last, below button */
           .kauvery-participant-info,
           .kauvery-floating-info {
+            order: 3 !important;
             position: relative !important;
-            margin: 12px auto 0 auto !important;
+            margin: 12px 0 20px 0 !important;
             width: 95% !important;
-            max-width: 320px !important;
+            max-width: 300px !important;
             z-index: 1 !important;
             font-size: 14px !important;
             align-self: center !important;
+            flex-shrink: 0 !important;
             grid-column: 1 !important;
             grid-row: 2 !important;
             justify-self: center !important;
-            order: 2 !important; /* Details strictly below join button */
           }
           
           .kauvery-participant-info h3,
@@ -2023,20 +2022,29 @@ const VideoConsultation = () => {
         }
 
         @media (max-width: 480px) {
-          /* Small mobile devices */
+          /* Small mobile devices - same column order */
           .zego-prejoin-view,
           .zego-prejoin-container,
           .zego-prejoin {
-            height: 50% !important;
+            min-height: 100% !important;
+            height: auto !important;
             margin-bottom: 10px !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
+          }
+          .zego-prejoin-view > *:first-child,
+          .zego-prejoin-container > *:first-child,
+          .zego-prejoin > *:first-child {
+            max-height: 40vh !important;
           }
           
           .kauvery-participant-info,
           .kauvery-floating-info {
             width: 98% !important;
-            margin: 0 auto 10px auto !important;
+            margin: 12px auto 20px auto !important;
             font-size: 12px !important;
             padding: 10px !important;
+            order: 3 !important;
           }
           
           .kauvery-participant-info h3,
@@ -2813,11 +2821,9 @@ const VideoConsultation = () => {
       fontFamily: "'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       background: theme.pageBg,
       color: colors.kauveryDarkGrey,
-      // Allow the page to scroll, especially on mobile where
-      // Zego's in-room controls and chat might extend beyond the viewport.
-      overflowX: 'hidden',
-      overflowY: 'auto',
-      minHeight: '100vh',
+      overflow: 'hidden',
+      height: '100vh',
+      maxHeight: '100vh',
       margin: 0,
       padding: 0
     },

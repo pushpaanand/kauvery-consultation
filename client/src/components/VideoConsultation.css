@@ -45,14 +45,32 @@
     min-height: 100dvh;
     overflow: hidden;
   }
-  /* Fit Zego container to visible viewport so bottom toolbar (mic, speaker, chat) is not cut off */
+  /* In-room: reserve space so Zego bottom toolbar and chat are visible and not cut off */
   .zego-video-container {
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
     margin-top: 56px !important;
-    height: calc(100dvh - 56px - 48px) !important;
-    min-height: calc(100dvh - 56px - 48px) !important;
-    max-height: calc(100dvh - 56px - 48px) !important;
+    height: calc(100dvh - 56px - 72px) !important;
+    min-height: calc(100dvh - 56px - 72px) !important;
+    max-height: calc(100dvh - 56px - 72px) !important;
+    padding-bottom: 0 !important;
+    box-sizing: border-box !important;
+  }
+  /* Ensure Zego in-room UI (toolbar, chat) is visible – target common Zego layout wrappers */
+  .zego-video-container [class*="bottom"],
+  .zego-video-container [class*="toolbar"],
+  .zego-video-container [class*="menu-bar"],
+  .zego-video-container [class*="footer"] {
+    position: relative !important;
+    z-index: 100 !important;
+    flex-shrink: 0 !important;
+  }
+  /* Chat / sidebar panel visible on mobile */
+  .zego-video-container [class*="chat"],
+  .zego-video-container [class*="sidebar"],
+  .zego-video-container [class*="panel"] {
+    z-index: 200 !important;
+    max-height: 60vh !important;
   }
   .video-leave-popup {
     padding: 16px !important;
