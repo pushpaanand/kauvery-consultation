@@ -1722,17 +1722,7 @@ const VideoConsultation = () => {
           box-shadow: none !important;
         }
         
-        /* Nuclear option - remove borders from everything */
-        * {
-          border: none !important;
-          border-width: 0 !important;
-          border-style: none !important;
-          border-color: transparent !important;
-          border-radius: 0 !important;
-          outline: none !important;
-          outline-width: 0 !important;
-          box-shadow: none !important;
-        }
+        /* Do NOT apply global * border/box-shadow – it breaks Zego in-call UI. Only pre-join is scoped below. */
         
         /* Ensure header shadow is preserved */
         header, [data-testid="header"], .header {
@@ -2495,8 +2485,8 @@ const VideoConsultation = () => {
   // Initialize Zego with Kauvery styling (called directly on page load)
   const initializeZego = async () => {
     try {
-      // Enhanced prevention of multiple initializations
-      if (zegoInitialized || zegoInstanceRef.current || document.querySelector('[class*="zego"]')) {
+      // Prevent double init only by state/ref; do NOT check document for "zego" (our container has class "zego-video-container" which would block first load)
+      if (zegoInitialized || zegoInstanceRef.current) {
         return;
       }
 
