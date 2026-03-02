@@ -56,26 +56,42 @@
     padding-bottom: 0 !important;
     box-sizing: border-box !important;
   }
-  /* In-room on mobile: hide floating doctor/patient details panel (desktop keeps it) */
-  body.kauvery-in-call .kauvery-floating-info {
+  /* In-room on mobile: hide ALL doctor/patient detail panels (desktop unchanged) */
+  body.kauvery-in-call .kauvery-floating-info,
+  body.kauvery-in-call .kauvery-participant-info {
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
+    opacity: 0 !important;
   }
-  /* In-room on mobile: hide doctor/patient name labels inside the room (Zego participant names) */
+  /* In-room on mobile: hide any consultation details inside the Zego container */
   body.kauvery-in-call .zego-video-container [class*="participant-name"],
   body.kauvery-in-call .zego-video-container [class*="user-name"],
   body.kauvery-in-call .zego-video-container [class*="display-name"],
   body.kauvery-in-call .zego-video-container [class*="userName"],
-  body.kauvery-in-call .zego-video-container [class*="participantName"] {
+  body.kauvery-in-call .zego-video-container [class*="participantName"],
+  body.kauvery-in-call .zego-video-container [class*="Consultation"],
+  body.kauvery-in-call .zego-video-container [class*="consultation"] {
     display: none !important;
     visibility: hidden !important;
   }
-  /* Ensure Zego in-room toolbar (mute, end call) and chat are visible on mobile */
+  /* Zego container: allow scroll so bottom toolbar is reachable if content is tall */
+  .zego-video-container {
+    display: block !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 20px !important;
+  }
+  /* Ensure Zego in-room toolbar (mute, video, end call) is visible and not clipped */
   .zego-video-container [class*="bottom"],
   .zego-video-container [class*="toolbar"],
   .zego-video-container [class*="menu-bar"],
-  .zego-video-container [class*="footer"] {
+  .zego-video-container [class*="footer"],
+  .zego-video-container [class*="Bottom"],
+  .zego-video-container [class*="Toolbar"],
+  .zego-video-container [class*="menuBar"],
+  .zego-video-container [class*="control"],
+  .zego-video-container [class*="Control"] {
     position: relative !important;
     z-index: 100 !important;
     flex-shrink: 0 !important;
@@ -87,7 +103,10 @@
   /* Chat / sidebar panel visible on mobile */
   .zego-video-container [class*="chat"],
   .zego-video-container [class*="sidebar"],
-  .zego-video-container [class*="panel"] {
+  .zego-video-container [class*="panel"],
+  .zego-video-container [class*="Chat"],
+  .zego-video-container [class*="Sidebar"],
+  .zego-video-container [class*="Panel"] {
     z-index: 200 !important;
     max-height: 60vh !important;
     visibility: visible !important;

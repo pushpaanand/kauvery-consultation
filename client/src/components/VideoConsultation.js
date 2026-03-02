@@ -952,6 +952,31 @@ const VideoConsultation = () => {
     return () => document.body.classList.remove('kauvery-in-call');
   }, [zegoInitialized]);
 
+  // In-room on mobile: force-hide doctor/patient details so they never show (CSS may not apply if re-injected)
+  useEffect(() => {
+    if (!zegoInitialized) return;
+    const isMobile = () => typeof window !== 'undefined' && window.innerWidth <= 768;
+    const hideDetails = () => {
+      if (!isMobile()) return;
+      const floating = document.querySelector('.kauvery-floating-info');
+      const participant = document.querySelector('.kauvery-participant-info');
+      [floating, participant].forEach(el => {
+        if (el) {
+          el.style.setProperty('display', 'none', 'important');
+          el.style.setProperty('visibility', 'hidden', 'important');
+        }
+      });
+      document.querySelectorAll('.zego-video-container [class*="Consultation"], .zego-video-container [class*="consultation"]').forEach(el => {
+        if (el && (el.textContent || '').toLowerCase().includes('doctor')) {
+          el.style.setProperty('display', 'none', 'important');
+        }
+      });
+    };
+    hideDetails();
+    const id = setInterval(hideDetails, 800);
+    return () => clearInterval(id);
+  }, [zegoInitialized]);
+
   // Add this useEffect to log when appointmentData changes
   useEffect(() => {
     if (appointmentData && Object.keys(appointmentData).length > 0) {
@@ -2330,11 +2355,9 @@ const VideoConsultation = () => {
                   });
                 }, 500);
 
-                // Check for Zego quit/end call *screens* and hide them – do NOT hide in-call toolbar (mute, end call)
-                const quitElements = node.querySelectorAll ? node.querySelectorAll('[class*="quit"], [class*="Quit"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"]') : [];
-                quitElements.forEach(element => {
-                  const inToolbar = element.closest && element.closest('[class*="bottom"], [class*="toolbar"], [class*="menu-bar"], [class*="footer"], [class*="Bottom"], [class*="Toolbar"], [class*="menuBar"]');
-                  if (inToolbar) return;
+                /* Hide only Zego "quit view" / leave confirmation screen – never hide toolbar (mute, video, end call, chat) */
+                const quitViewElements = node.querySelectorAll ? node.querySelectorAll('[class*="quit-view"], [class*="quitView"], [class*="QuitView"], [class*="leave-view"], [class*="leaveView"]') : [];
+                quitViewElements.forEach(element => {
                   element.style.display = 'none';
                   element.style.visibility = 'hidden';
                   element.style.opacity = '0';
@@ -2369,17 +2392,21 @@ const VideoConsultation = () => {
                   }
                 });
 
-                // Hide any Zego popups that appear
+                /* Hide only leave/quit confirmation popups – do NOT hide chat or other panels */
                 if (node.className && (
                   node.className.toLowerCase().includes('popup') ||
                   node.className.toLowerCase().includes('modal') ||
                   node.className.toLowerCase().includes('dialog') ||
                   node.className.toLowerCase().includes('overlay')
                 )) {
-                  node.style.display = 'none';
-                  node.style.visibility = 'hidden';
-                  node.style.opacity = '0';
-                  node.style.pointerEvents = 'none';
+                  const text = (node.textContent || '').toLowerCase();
+                  const isLeaveConfirmation = text.includes('leave the room') || text.includes('are you sure') || text.includes('end the call') || text.includes('quit');
+                  if (isLeaveConfirmation) {
+                    node.style.display = 'none';
+                    node.style.visibility = 'hidden';
+                    node.style.opacity = '0';
+                    node.style.pointerEvents = 'none';
+                  }
                 }
 
                 // Check for text that indicates call ended
@@ -2430,11 +2457,9 @@ const VideoConsultation = () => {
       
       // Periodically check for and hide Zego quit elements and popups
       setInterval(() => {
-        // Hide quit/leave *screens* only – do NOT hide in-call toolbar (mute, end call, etc.)
-        const quitElements = document.querySelectorAll('[class*="quit"], [class*="Quit"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"]');
-        quitElements.forEach(element => {
-          const inToolbar = element.closest && element.closest('[class*="bottom"], [class*="toolbar"], [class*="menu-bar"], [class*="footer"], [class*="Bottom"], [class*="Toolbar"], [class*="menuBar"]');
-          if (inToolbar) return; // keep mute, end call, chat buttons visible
+        /* Hide only Zego quit/leave *view* (full screen) – never hide toolbar buttons (mute, video, end call, chat) */
+        const quitViewOnly = document.querySelectorAll('[class*="quit-view"], [class*="quitView"], [class*="QuitView"], [class*="leave-view"], [class*="leaveView"]');
+        quitViewOnly.forEach(element => {
           if (element.style.display !== 'none') {
             element.style.display = 'none';
             element.style.visibility = 'hidden';
@@ -2443,10 +2468,13 @@ const VideoConsultation = () => {
           }
         });
 
-        // Hide any Zego popups or modals
+        /* Hide only leave/quit confirmation popups – do NOT hide chat panel or other UI */
         const popupElements = document.querySelectorAll('[class*="popup"], [class*="modal"], [class*="dialog"], [class*="overlay"], [class*="Popup"], [class*="Modal"], [class*="Dialog"], [class*="Overlay"]');
         popupElements.forEach(element => {
-          if (element.style.display !== 'none' && !element.classList.contains('kauvery-confirm-button')) {
+          if (element.classList.contains('kauvery-confirm-button')) return;
+          const text = (element.textContent || '').toLowerCase();
+          const isLeaveConfirmation = text.includes('leave the room') || text.includes('are you sure') || text.includes('end the call') || text.includes('quit');
+          if (isLeaveConfirmation && element.style.display !== 'none') {
             element.style.display = 'none';
             element.style.visibility = 'hidden';
             element.style.opacity = '0';
