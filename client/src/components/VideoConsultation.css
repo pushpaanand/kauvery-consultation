@@ -39,6 +39,43 @@
   animation: pulse 2s infinite;
 }
 
+/* In-room: never show consultation details (doctor/patient name) overlay */
+.kauvery-floating-info {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* In-room: hide Zego participant name labels (doctor/patient on video tiles) if desired */
+.zego-video-container [class*="user-name"],
+.zego-video-container [class*="participant-name"],
+.zego-video-container [class*="display-name"],
+.zego-video-container [class*="name-label"],
+.zego-video-container [class*="userName"] {
+  display: none !important;
+}
+
+/* In-room: ensure toolbar (mute, camera, leave) and chat stay visible */
+.zego-video-container [class*="bottom"],
+.zego-video-container [class*="toolbar"],
+.zego-video-container [class*="menu-bar"],
+.zego-video-container [class*="footer"],
+.zego-video-container [class*="control-bar"] {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 100 !important;
+  flex-shrink: 0 !important;
+}
+.zego-video-container [class*="chat"],
+.zego-video-container [class*="sidebar"],
+.zego-video-container [class*="panel"] {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 200 !important;
+}
+
 /* Mobile view – design only; no rules that break Zego init */
 @media (max-width: 768px) {
   .video-consultation-page {

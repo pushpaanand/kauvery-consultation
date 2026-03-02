@@ -2130,20 +2130,10 @@ const VideoConsultation = () => {
           color: #962067 !important;
         }
 
-        /* Hide Zego's default quit/end call page - only in pre-join view */
+        /* Do NOT hide [class*="leave"] / [class*="end"] globally – that hides in-call toolbar (mute, camera, leave, chat). Only hide full-page quit view if needed. */
         .zego-quit-view,
-        .zego-quit-container,
-        .zego-quit,
-        [class*="quit"],
-        [class*="Quit"],
-        [class*="end"],
-        [class*="End"],
-        [class*="leave"],
-        [class*="Leave"] {
+        .zego-quit-container {
           display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
         }
         
         /* Ensure Zego's join button is visible and styled */
@@ -2320,13 +2310,16 @@ const VideoConsultation = () => {
                   });
                 }, 500);
 
-                // Check for Zego quit/end call elements and hide them
+                // Do NOT hide in-call toolbar (mute, camera, leave, chat) – only hide full-page quit view
                 const quitElements = node.querySelectorAll ? node.querySelectorAll('[class*="quit"], [class*="Quit"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"]') : [];
                 quitElements.forEach(element => {
-                  element.style.display = 'none';
-                  element.style.visibility = 'hidden';
-                  element.style.opacity = '0';
-                  element.style.pointerEvents = 'none';
+                  const inToolbarOrChat = element.closest && element.closest('[class*="toolbar"], [class*="menu-bar"], [class*="bottom"], [class*="footer"], [class*="control-bar"], [class*="chat"], [class*="sidebar"]');
+                  if (!inToolbarOrChat) {
+                    element.style.display = 'none';
+                    element.style.visibility = 'hidden';
+                    element.style.opacity = '0';
+                    element.style.pointerEvents = 'none';
+                  }
                 });
 
                 // Check for end call buttons and redirect them to our handler
@@ -2416,12 +2409,13 @@ const VideoConsultation = () => {
       // Periodically check and update title color
       setInterval(forceUpdateTitleColor, 1000);
       
-      // Periodically check for and hide Zego quit elements and popups
+      // Periodically check for and hide Zego full-page quit view only; do NOT hide in-call toolbar (mute, camera, leave, chat)
       setInterval(() => {
-        // Hide quit elements
         const quitElements = document.querySelectorAll('[class*="quit"], [class*="Quit"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"]');
         quitElements.forEach(element => {
-          if (element.style.display !== 'none') {
+          // Keep in-call toolbar and chat visible – only hide if NOT inside toolbar/menu/chat
+          const inToolbarOrChat = element.closest && element.closest('[class*="toolbar"], [class*="menu-bar"], [class*="bottom"], [class*="footer"], [class*="control-bar"], [class*="chat"], [class*="sidebar"], [class*="panel"]');
+          if (!inToolbarOrChat && element.style.display !== 'none') {
             element.style.display = 'none';
             element.style.visibility = 'hidden';
             element.style.opacity = '0';
@@ -2429,10 +2423,11 @@ const VideoConsultation = () => {
           }
         });
 
-        // Hide any Zego popups or modals
+        // Hide Zego popups/modals but NOT the chat panel (keep chat visible)
         const popupElements = document.querySelectorAll('[class*="popup"], [class*="modal"], [class*="dialog"], [class*="overlay"], [class*="Popup"], [class*="Modal"], [class*="Dialog"], [class*="Overlay"]');
         popupElements.forEach(element => {
-          if (element.style.display !== 'none' && !element.classList.contains('kauvery-confirm-button')) {
+          const isChatPanel = element.closest && element.closest('[class*="chat"], [class*="sidebar"], [class*="message"]');
+          if (!isChatPanel && element.style.display !== 'none' && !element.classList.contains('kauvery-confirm-button')) {
             element.style.display = 'none';
             element.style.visibility = 'hidden';
             element.style.opacity = '0';
