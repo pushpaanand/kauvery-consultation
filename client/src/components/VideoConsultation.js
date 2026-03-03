@@ -1888,6 +1888,26 @@ const VideoConsultation = () => {
           outline-width: 0 !important;
           box-shadow: none !important;
         }
+        /* Restore card styling for Doctor/Patient and room status (previous design – second image) */
+        .zego-prejoin-view .kauvery-participant-info,
+        .zego-prejoin-container .kauvery-participant-info,
+        .kauvery-participant-info {
+          border-radius: 20px !important;
+          box-shadow: 0 8px 25px rgba(162, 50, 147, 0.15) !important;
+          border: 2px solid rgba(162, 50, 147, 0.2) !important;
+        }
+        .zego-prejoin-view .kauvery-participant-info > div > div:first-child > div,
+        .zego-prejoin-container .kauvery-participant-info > div > div:first-child > div {
+          border-radius: 25px !important;
+          box-shadow: 0 4px 15px rgba(162, 50, 147, 0.1) !important;
+          border: 2px solid rgba(162, 50, 147, 0.2) !important;
+        }
+        .kauvery-participant-info #room-status,
+        .kauvery-participant-info [id="room-status"] {
+          border-radius: 20px !important;
+          box-shadow: 0 4px 15px rgba(40, 167, 69, 0.15) !important;
+          border: 2px solid rgba(40, 167, 69, 0.3) !important;
+        }
 
         /* Responsive design for different screen sizes - only for pre-join view */
         @media (min-width: 1201px) {
@@ -2020,18 +2040,7 @@ const VideoConsultation = () => {
           display: none !important;
         }
 
-        /* Hide welcome text inside Zego container - only in pre-join view */
-        .zego-prejoin-view h1,
-        .zego-prejoin-view h2,
-        .zego-prejoin-view h3,
-        .zego-prejoin-view .title,
-        .zego-prejoin-view [class*="title"],
-        .zego-prejoin-view [class*="header"],
-        .zego-prejoin-view [class*="welcome"] {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-        }
+        /* Keep "Welcome to Kauvery Hospital" and title visible (previous design – second image) */
 
         /* More aggressive title color override - only for pre-join view */
         .zego-prejoin-view *,
