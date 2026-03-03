@@ -699,15 +699,13 @@ const VideoConsultation = () => {
   useEffect(() => {
     applyKauveryStyles();
     
-      // Clean up any existing participant info to prevent duplicates
-  const existingParticipantInfo = document.querySelectorAll('.kauvery-participant-info, .kauvery-floating-info');
-  existingParticipantInfo.forEach(info => {
+      // Clean up only floating info (in-room panel); keep pre-join participant info (Doctor/Patient card)
+  const existingFloatingOnly = document.querySelectorAll('.kauvery-floating-info');
+  existingFloatingOnly.forEach(info => {
     if (info && info.parentNode) {
       try {
-        // Use the safe removeChild method we defined
         info.parentNode.removeChild(info);
       } catch (error) {
-        // If all else fails, just hide the element
         info.style.display = 'none';
         info.style.visibility = 'hidden';
         info.style.opacity = '0';
@@ -2066,13 +2064,16 @@ const VideoConsultation = () => {
           display: none !important;
         }
 
-        /* Ensure consultation details appear inline with content */
+        /* Ensure Doctor/Patient card and room status always visible (second image design) */
         .kauvery-participant-info {
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
           position: relative !important;
           margin: 20px auto !important;
           width: 100% !important;
           max-width: 400px !important;
-          z-index: 1 !important;
+          z-index: 10 !important;
           transform: none !important;
           box-shadow: 0 4px 16px rgba(162, 50, 147, 0.15) !important;
           border-radius: 12px !important;
@@ -2172,10 +2173,10 @@ const VideoConsultation = () => {
           if (mutation.type === 'childList') {
             mutation.addedNodes.forEach((node) => {
               if (node.nodeType === Node.ELEMENT_NODE) {
-                // Simple border removal for pre-join view elements
+                // Simple border removal for pre-join view elements – do NOT strip our Doctor/Patient card
                 const newElements = node.querySelectorAll ? node.querySelectorAll('*') : [node];
                 newElements.forEach(element => {
-                  // Only apply border removal if it's in the pre-join view
+                  if (element.closest && element.closest('.kauvery-participant-info')) return;
                   if (element.closest('.zego-prejoin-view') || element.closest('.zego-prejoin-container') || element.closest('.zego-prejoin')) {
                     element.style.border = 'none';
                     element.style.borderRadius = '0';
@@ -2384,11 +2385,10 @@ const VideoConsultation = () => {
       // Periodically check and update title color
       setInterval(forceUpdateTitleColor, 1000);
       
-      // Periodically check for and hide Zego quit elements and popups
+      // Periodically hide only quit/leave confirmation screens (not Join button or participant card)
       setInterval(() => {
-        // Hide quit elements
-        const quitElements = document.querySelectorAll('[class*="quit"], [class*="Quit"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"]');
-        quitElements.forEach(element => {
+        const quitViewOnly = document.querySelectorAll('[class*="quit-view"], [class*="quitView"], [class*="leave-view"], [class*="leaveView"]');
+        quitViewOnly.forEach(element => {
           if (element.style.display !== 'none') {
             element.style.display = 'none';
             element.style.visibility = 'hidden';
@@ -2396,11 +2396,11 @@ const VideoConsultation = () => {
             element.style.pointerEvents = 'none';
           }
         });
-
-        // Hide any Zego popups or modals
-        const popupElements = document.querySelectorAll('[class*="popup"], [class*="modal"], [class*="dialog"], [class*="overlay"], [class*="Popup"], [class*="Modal"], [class*="Dialog"], [class*="Overlay"]');
+        const popupElements = document.querySelectorAll('[class*="popup"], [class*="modal"], [class*="dialog"], [class*="overlay"]');
         popupElements.forEach(element => {
-          if (element.style.display !== 'none' && !element.classList.contains('kauvery-confirm-button')) {
+          if (element.classList.contains('kauvery-confirm-button')) return;
+          const text = (element.textContent || '').toLowerCase();
+          if ((text.includes('leave the room') || text.includes('are you sure')) && element.style.display !== 'none') {
             element.style.display = 'none';
             element.style.visibility = 'hidden';
             element.style.opacity = '0';
@@ -2434,6 +2434,7 @@ const VideoConsultation = () => {
       setInterval(() => {
         const prejoinElements = document.querySelectorAll('.zego-prejoin-view *, .zego-prejoin-container *, .zego-prejoin *');
         prejoinElements.forEach(element => {
+          if (element.closest && element.closest('.kauvery-participant-info')) return;
           element.style.border = 'none';
           element.style.borderRadius = '0';
           element.style.boxShadow = 'none';
@@ -2663,10 +2664,11 @@ const VideoConsultation = () => {
             setInitializationError(error);
           },
                   onPreJoinViewReady: () => {
-          // Customize the join button text and add participant info
+          // Add Doctor/Patient card and "No one else in the room" (second image design)
+          setTimeout(() => customizePreJoinView(), 300);
           setTimeout(() => {
-            customizePreJoinView();
-          }, 500);
+            if (!document.querySelector('.kauvery-participant-info')) customizePreJoinView();
+          }, 1200);
         },
         onJoinRoomSuccess: () => {
           
