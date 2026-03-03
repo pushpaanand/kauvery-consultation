@@ -1983,98 +1983,39 @@ const VideoConsultation = () => {
         }
 
         @media (max-width: 768px) {
-          /* Tablet and Mobile - Stacked: container (video) -> button -> details */
+          /* Mobile: keep same layout as desktop where possible (reverted) */
           .zego-prejoin-view,
           .zego-prejoin-container,
           .zego-prejoin {
             width: 100% !important;
-            min-height: 100% !important;
-            height: auto !important;
+            height: 100% !important;
             position: relative !important;
             display: flex !important;
-            flex-direction: column !important;
             align-items: center !important;
-            justify-content: flex-start !important;
-            overflow-y: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-            grid-column: 1 !important;
-            grid-row: 1 !important;
+            justify-content: center !important;
           }
-          /* Video preview first, limited height so button and details are visible */
-          .zego-prejoin-view > *:first-child,
-          .zego-prejoin-container > *:first-child,
-          .zego-prejoin > *:first-child {
-            order: 1 !important;
-            flex: 0 1 auto !important;
-            max-height: 45vh !important;
-            width: 100% !important;
-            min-height: 120px !important;
-          }
-          /* Button area second */
-          .zego-prejoin-view > *:not(:first-child):not(.kauvery-participant-info),
-          .zego-prejoin-container > *:not(:first-child):not(.kauvery-participant-info),
-          .zego-prejoin > *:not(:first-child):not(.kauvery-participant-info) {
-            order: 2 !important;
-            flex-shrink: 0 !important;
-          }
-          /* Details (participant info) last, below button */
           .kauvery-participant-info,
           .kauvery-floating-info {
-            order: 3 !important;
             position: relative !important;
-            margin: 12px 0 20px 0 !important;
+            margin: 0 auto !important;
             width: 95% !important;
             max-width: 300px !important;
             z-index: 1 !important;
-            font-size: 14px !important;
-            align-self: center !important;
-            flex-shrink: 0 !important;
-            grid-column: 1 !important;
-            grid-row: 2 !important;
-            justify-self: center !important;
-          }
-          
-          .kauvery-participant-info h3,
-          .kauvery-floating-info h3 {
-            font-size: 18px !important;
-          }
-          
-          .kauvery-participant-info .appointment-details,
-          .kauvery-floating-info .appointment-details {
-            grid-template-columns: 1fr !important;
-            gap: 10px !important;
           }
         }
 
         @media (max-width: 480px) {
-          /* Small mobile devices - same column order */
           .zego-prejoin-view,
           .zego-prejoin-container,
           .zego-prejoin {
-            min-height: 100% !important;
-            height: auto !important;
-            margin-bottom: 10px !important;
-            flex-direction: column !important;
-            justify-content: flex-start !important;
+            width: 100% !important;
+            height: 100% !important;
           }
-          .zego-prejoin-view > *:first-child,
-          .zego-prejoin-container > *:first-child,
-          .zego-prejoin > *:first-child {
-            max-height: 40vh !important;
-          }
-          
           .kauvery-participant-info,
           .kauvery-floating-info {
             width: 98% !important;
-            margin: 12px auto 20px auto !important;
-            font-size: 12px !important;
+            margin: 0 auto !important;
             padding: 10px !important;
-            order: 3 !important;
-          }
-          
-          .kauvery-participant-info h3,
-          .kauvery-floating-info h3 {
-            font-size: 16px !important;
           }
         }
 
@@ -2093,18 +2034,7 @@ const VideoConsultation = () => {
           display: none !important;
         }
 
-        /* Hide welcome text inside Zego container - only in pre-join view */
-        .zego-prejoin-view h1,
-        .zego-prejoin-view h2,
-        .zego-prejoin-view h3,
-        .zego-prejoin-view .title,
-        .zego-prejoin-view [class*="title"],
-        .zego-prejoin-view [class*="header"],
-        .zego-prejoin-view [class*="welcome"] {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-        }
+        /* Keep "Welcome to Kauvery Hospital" and title visible – do not hide (user design) */
 
         /* More aggressive title color override - only for pre-join view */
         .zego-prejoin-view *,
@@ -2165,16 +2095,13 @@ const VideoConsultation = () => {
           color: #962067 !important;
         }
 
-        /* Hide Zego's default quit/end call page - only in pre-join view */
+        /* Hide only Zego quit/leave confirmation *screens*, not toolbar buttons */
         .zego-quit-view,
         .zego-quit-container,
-        .zego-quit,
-        [class*="quit"],
-        [class*="Quit"],
-        [class*="end"],
-        [class*="End"],
-        [class*="leave"],
-        [class*="Leave"] {
+        [class*="quit-view"],
+        [class*="quitView"],
+        [class*="leave-view"],
+        [class*="leaveView"] {
           display: none !important;
           visibility: hidden !important;
           opacity: 0 !important;
