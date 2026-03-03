@@ -1753,24 +1753,8 @@ const VideoConsultation = () => {
           box-sizing: border-box !important;
         }
 
-        /* Target Zego join button with multiple selectors */
-        .zego-join-button,
-        .zego-prejoin-view button,
-        .zego-prejoin-view .zego-button,
-        .zego-prejoin-view [class*="button"],
-        .zego-prejoin-view [class*="join"],
-        .zego-prejoin-view button[type="button"],
-        .zego-prejoin-view .zego-ui-button,
-        .zego-prejoin-view .zego-btn,
-        .zego-prejoin-view .join-btn,
-        .zego-prejoin-view .start-btn,
-        .zego-prejoin-view .primary-btn {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-        }
+        /* Do NOT hide the Join button – keep it visible so user can enter the room; style it below */
         
-        .zego-join-button:hover,
         .zego-prejoin-view button:hover,
         .zego-prejoin-view .zego-button:hover,
         .zego-prejoin-view [class*="button"]:hover,
@@ -2108,23 +2092,20 @@ const VideoConsultation = () => {
           color: #962067 !important;
         }
 
-        /* Hide Zego's default quit/end call page - only in pre-join view */
+        /* Hide only quit/leave confirmation screens, not toolbar or Join button */
         .zego-quit-view,
         .zego-quit-container,
-        .zego-quit,
-        [class*="quit"],
-        [class*="Quit"],
-        [class*="end"],
-        [class*="End"],
-        [class*="leave"],
-        [class*="Leave"] {
+        [class*="quit-view"],
+        [class*="quitView"],
+        [class*="leave-view"],
+        [class*="leaveView"] {
           display: none !important;
           visibility: hidden !important;
           opacity: 0 !important;
           pointer-events: none !important;
         }
         
-        /* Ensure Zego's join button is visible and styled */
+        /* Ensure Zego's join button is visible and styled (Kauvery design) */
         .zego-prejoin-view button,
         .zego-prejoin-view [class*="button"],
         .zego-prejoin-view [class*="join"] {
@@ -2464,7 +2445,8 @@ const VideoConsultation = () => {
   const initializeZego = async () => {
     try {
       // Enhanced prevention of multiple initializations
-      if (zegoInitialized || zegoInstanceRef.current || document.querySelector('[class*="zego"]')) {
+      /* Do NOT check document for [class*="zego"] – our container has class "zego-video-container" and that blocks first load */
+      if (zegoInitialized || zegoInstanceRef.current) {
         return;
       }
 
