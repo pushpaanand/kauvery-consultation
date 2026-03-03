@@ -713,11 +713,7 @@ const VideoConsultation = () => {
     }
   });
     
-    // Add a flag to prevent multiple executions
-    if (window.kauveryCustomizationDone) {
-      return;
-    }
-    window.kauveryCustomizationDone = true;
+    // Always apply customization on mount so updated design reflects reliably
     
     // Override React's DOM manipulation to prevent conflicts
     const originalRemoveChild = Node.prototype.removeChild;
@@ -1115,16 +1111,15 @@ const VideoConsultation = () => {
       modifyExistingElements();
       
       // Also try to add our custom section as a fallback
-      let prejoinContainer = document.querySelector('[class*="prejoin"], [class*="Prejoin"], [class*="zego"], [class*="PreJoin"]');
+      let prejoinContainer = document.querySelector('[class*="prejoin"], [class*="Prejoin"], [class*="PreJoin"]');
+      const joinButton = Array.from(document.querySelectorAll('button')).find(button => {
+        const txt = (button.textContent || '').toLowerCase();
+        return txt.includes('join') || txt.includes('start') || txt.includes('enter');
+      });
       
       // If not found, try to find any container with buttons
-      if (!prejoinContainer) {
-        const buttons = document.querySelectorAll('button');
-        buttons.forEach(button => {
-          if (button.textContent && button.textContent.toLowerCase().includes('join')) {
-            prejoinContainer = button.closest('[class*="container"], [class*="view"], [class*="panel"], [class*="content"]') || button.parentElement;
-          }
-        });
+      if (!prejoinContainer && joinButton) {
+        prejoinContainer = joinButton.closest('[class*="container"], [class*="view"], [class*="panel"], [class*="content"]') || joinButton.parentElement;
       }
       
       // Fallback to body if still not found
@@ -1133,11 +1128,8 @@ const VideoConsultation = () => {
       }
       
       if (prejoinContainer) {
-        // Remove existing participant info if any
-        const existingInfo = prejoinContainer.querySelector('.kauvery-participant-info');
-        if (existingInfo) {
-          existingInfo.remove();
-        }
+        // Remove existing participant info globally to avoid duplicates
+        document.querySelectorAll('.kauvery-participant-info').forEach(el => el.remove());
         
         // Also remove any floating participant info
         const existingFloatingInfo = document.querySelector('.kauvery-floating-info');
@@ -1318,8 +1310,15 @@ const VideoConsultation = () => {
           </div>
         `;
         
-        // Insert the participant info
-        prejoinContainer.appendChild(participantInfo);
+        // Insert the participant info under Join button area (same as previous design screenshot)
+        const joinHost = joinButton
+          ? (joinButton.closest('[class*="content"], [class*="panel"], [class*="container"], [class*="view"]') || joinButton.parentElement || prejoinContainer)
+          : prejoinContainer;
+        if (joinButton && joinButton.parentNode) {
+          joinButton.insertAdjacentElement('afterend', participantInfo);
+        } else {
+          joinHost.appendChild(participantInfo);
+        }
         
               // Start monitoring room status
       updateRoomStatus();
