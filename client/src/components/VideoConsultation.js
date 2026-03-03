@@ -942,41 +942,6 @@ const VideoConsultation = () => {
 
   }, [zegoInitialized, appointmentData]);
 
-  // Body class for "in call" – used to hide floating doctor/patient panel on mobile only (desktop unchanged)
-  useEffect(() => {
-    if (zegoInitialized) {
-      document.body.classList.add('kauvery-in-call');
-    } else {
-      document.body.classList.remove('kauvery-in-call');
-    }
-    return () => document.body.classList.remove('kauvery-in-call');
-  }, [zegoInitialized]);
-
-  // In-room on mobile: force-hide doctor/patient details so they never show (CSS may not apply if re-injected)
-  useEffect(() => {
-    if (!zegoInitialized) return;
-    const isMobile = () => typeof window !== 'undefined' && window.innerWidth <= 768;
-    const hideDetails = () => {
-      if (!isMobile()) return;
-      const floating = document.querySelector('.kauvery-floating-info');
-      const participant = document.querySelector('.kauvery-participant-info');
-      [floating, participant].forEach(el => {
-        if (el) {
-          el.style.setProperty('display', 'none', 'important');
-          el.style.setProperty('visibility', 'hidden', 'important');
-        }
-      });
-      document.querySelectorAll('.zego-video-container [class*="Consultation"], .zego-video-container [class*="consultation"]').forEach(el => {
-        if (el && (el.textContent || '').toLowerCase().includes('doctor')) {
-          el.style.setProperty('display', 'none', 'important');
-        }
-      });
-    };
-    hideDetails();
-    const id = setInterval(hideDetails, 800);
-    return () => clearInterval(id);
-  }, [zegoInitialized]);
-
   // Add this useEffect to log when appointmentData changes
   useEffect(() => {
     if (appointmentData && Object.keys(appointmentData).length > 0) {
@@ -1757,7 +1722,17 @@ const VideoConsultation = () => {
           box-shadow: none !important;
         }
         
-        /* Do NOT apply global * border/box-shadow – it breaks Zego in-call UI. Only pre-join is scoped below. */
+        /* Nuclear option - remove borders from everything */
+        * {
+          border: none !important;
+          border-width: 0 !important;
+          border-style: none !important;
+          border-color: transparent !important;
+          border-radius: 0 !important;
+          outline: none !important;
+          outline-width: 0 !important;
+          box-shadow: none !important;
+        }
         
         /* Ensure header shadow is preserved */
         header, [data-testid="header"], .header {
@@ -1983,39 +1958,98 @@ const VideoConsultation = () => {
         }
 
         @media (max-width: 768px) {
-          /* Mobile: keep same layout as desktop where possible (reverted) */
+          /* Tablet and Mobile - Stacked: container (video) -> button -> details */
           .zego-prejoin-view,
           .zego-prejoin-container,
           .zego-prejoin {
             width: 100% !important;
-            height: 100% !important;
+            min-height: 100% !important;
+            height: auto !important;
             position: relative !important;
             display: flex !important;
+            flex-direction: column !important;
             align-items: center !important;
-            justify-content: center !important;
+            justify-content: flex-start !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            grid-column: 1 !important;
+            grid-row: 1 !important;
           }
+          /* Video preview first, limited height so button and details are visible */
+          .zego-prejoin-view > *:first-child,
+          .zego-prejoin-container > *:first-child,
+          .zego-prejoin > *:first-child {
+            order: 1 !important;
+            flex: 0 1 auto !important;
+            max-height: 45vh !important;
+            width: 100% !important;
+            min-height: 120px !important;
+          }
+          /* Button area second */
+          .zego-prejoin-view > *:not(:first-child):not(.kauvery-participant-info),
+          .zego-prejoin-container > *:not(:first-child):not(.kauvery-participant-info),
+          .zego-prejoin > *:not(:first-child):not(.kauvery-participant-info) {
+            order: 2 !important;
+            flex-shrink: 0 !important;
+          }
+          /* Details (participant info) last, below button */
           .kauvery-participant-info,
           .kauvery-floating-info {
+            order: 3 !important;
             position: relative !important;
-            margin: 0 auto !important;
+            margin: 12px 0 20px 0 !important;
             width: 95% !important;
             max-width: 300px !important;
             z-index: 1 !important;
+            font-size: 14px !important;
+            align-self: center !important;
+            flex-shrink: 0 !important;
+            grid-column: 1 !important;
+            grid-row: 2 !important;
+            justify-self: center !important;
+          }
+          
+          .kauvery-participant-info h3,
+          .kauvery-floating-info h3 {
+            font-size: 18px !important;
+          }
+          
+          .kauvery-participant-info .appointment-details,
+          .kauvery-floating-info .appointment-details {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
           }
         }
 
         @media (max-width: 480px) {
+          /* Small mobile devices - same column order */
           .zego-prejoin-view,
           .zego-prejoin-container,
           .zego-prejoin {
-            width: 100% !important;
-            height: 100% !important;
+            min-height: 100% !important;
+            height: auto !important;
+            margin-bottom: 10px !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
           }
+          .zego-prejoin-view > *:first-child,
+          .zego-prejoin-container > *:first-child,
+          .zego-prejoin > *:first-child {
+            max-height: 40vh !important;
+          }
+          
           .kauvery-participant-info,
           .kauvery-floating-info {
             width: 98% !important;
-            margin: 0 auto !important;
+            margin: 12px auto 20px auto !important;
+            font-size: 12px !important;
             padding: 10px !important;
+            order: 3 !important;
+          }
+          
+          .kauvery-participant-info h3,
+          .kauvery-floating-info h3 {
+            font-size: 16px !important;
           }
         }
 
@@ -2034,7 +2068,18 @@ const VideoConsultation = () => {
           display: none !important;
         }
 
-        /* Keep "Welcome to Kauvery Hospital" and title visible – do not hide (user design) */
+        /* Hide welcome text inside Zego container - only in pre-join view */
+        .zego-prejoin-view h1,
+        .zego-prejoin-view h2,
+        .zego-prejoin-view h3,
+        .zego-prejoin-view .title,
+        .zego-prejoin-view [class*="title"],
+        .zego-prejoin-view [class*="header"],
+        .zego-prejoin-view [class*="welcome"] {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+        }
 
         /* More aggressive title color override - only for pre-join view */
         .zego-prejoin-view *,
@@ -2095,13 +2140,16 @@ const VideoConsultation = () => {
           color: #962067 !important;
         }
 
-        /* Hide only Zego quit/leave confirmation *screens*, not toolbar buttons */
+        /* Hide Zego's default quit/end call page - only in pre-join view */
         .zego-quit-view,
         .zego-quit-container,
-        [class*="quit-view"],
-        [class*="quitView"],
-        [class*="leave-view"],
-        [class*="leaveView"] {
+        .zego-quit,
+        [class*="quit"],
+        [class*="Quit"],
+        [class*="end"],
+        [class*="End"],
+        [class*="leave"],
+        [class*="Leave"] {
           display: none !important;
           visibility: hidden !important;
           opacity: 0 !important;
@@ -2282,9 +2330,9 @@ const VideoConsultation = () => {
                   });
                 }, 500);
 
-                /* Hide only Zego "quit view" / leave confirmation screen – never hide toolbar (mute, video, end call, chat) */
-                const quitViewElements = node.querySelectorAll ? node.querySelectorAll('[class*="quit-view"], [class*="quitView"], [class*="QuitView"], [class*="leave-view"], [class*="leaveView"]') : [];
-                quitViewElements.forEach(element => {
+                // Check for Zego quit/end call elements and hide them
+                const quitElements = node.querySelectorAll ? node.querySelectorAll('[class*="quit"], [class*="Quit"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"]') : [];
+                quitElements.forEach(element => {
                   element.style.display = 'none';
                   element.style.visibility = 'hidden';
                   element.style.opacity = '0';
@@ -2319,21 +2367,17 @@ const VideoConsultation = () => {
                   }
                 });
 
-                /* Hide only leave/quit confirmation popups – do NOT hide chat or other panels */
+                // Hide any Zego popups that appear
                 if (node.className && (
                   node.className.toLowerCase().includes('popup') ||
                   node.className.toLowerCase().includes('modal') ||
                   node.className.toLowerCase().includes('dialog') ||
                   node.className.toLowerCase().includes('overlay')
                 )) {
-                  const text = (node.textContent || '').toLowerCase();
-                  const isLeaveConfirmation = text.includes('leave the room') || text.includes('are you sure') || text.includes('end the call') || text.includes('quit');
-                  if (isLeaveConfirmation) {
-                    node.style.display = 'none';
-                    node.style.visibility = 'hidden';
-                    node.style.opacity = '0';
-                    node.style.pointerEvents = 'none';
-                  }
+                  node.style.display = 'none';
+                  node.style.visibility = 'hidden';
+                  node.style.opacity = '0';
+                  node.style.pointerEvents = 'none';
                 }
 
                 // Check for text that indicates call ended
@@ -2384,9 +2428,9 @@ const VideoConsultation = () => {
       
       // Periodically check for and hide Zego quit elements and popups
       setInterval(() => {
-        /* Hide only Zego quit/leave *view* (full screen) – never hide toolbar buttons (mute, video, end call, chat) */
-        const quitViewOnly = document.querySelectorAll('[class*="quit-view"], [class*="quitView"], [class*="QuitView"], [class*="leave-view"], [class*="leaveView"]');
-        quitViewOnly.forEach(element => {
+        // Hide quit elements
+        const quitElements = document.querySelectorAll('[class*="quit"], [class*="Quit"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"]');
+        quitElements.forEach(element => {
           if (element.style.display !== 'none') {
             element.style.display = 'none';
             element.style.visibility = 'hidden';
@@ -2395,13 +2439,10 @@ const VideoConsultation = () => {
           }
         });
 
-        /* Hide only leave/quit confirmation popups – do NOT hide chat panel or other UI */
+        // Hide any Zego popups or modals
         const popupElements = document.querySelectorAll('[class*="popup"], [class*="modal"], [class*="dialog"], [class*="overlay"], [class*="Popup"], [class*="Modal"], [class*="Dialog"], [class*="Overlay"]');
         popupElements.forEach(element => {
-          if (element.classList.contains('kauvery-confirm-button')) return;
-          const text = (element.textContent || '').toLowerCase();
-          const isLeaveConfirmation = text.includes('leave the room') || text.includes('are you sure') || text.includes('end the call') || text.includes('quit');
-          if (isLeaveConfirmation && element.style.display !== 'none') {
+          if (element.style.display !== 'none' && !element.classList.contains('kauvery-confirm-button')) {
             element.style.display = 'none';
             element.style.visibility = 'hidden';
             element.style.opacity = '0';
@@ -2454,8 +2495,8 @@ const VideoConsultation = () => {
   // Initialize Zego with Kauvery styling (called directly on page load)
   const initializeZego = async () => {
     try {
-      // Prevent double init only by state/ref; do NOT check document for "zego" (our container has class "zego-video-container" which would block first load)
-      if (zegoInitialized || zegoInstanceRef.current) {
+      // Enhanced prevention of multiple initializations
+      if (zegoInitialized || zegoInstanceRef.current || document.querySelector('[class*="zego"]')) {
         return;
       }
 
