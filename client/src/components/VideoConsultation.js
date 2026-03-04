@@ -1983,16 +1983,11 @@ const VideoConsultation = () => {
           
           .kauvery-participant-info,
           .kauvery-floating-info {
-            position: relative !important;
-            margin: 0 !important;
-            width: 95% !important;
-            max-width: 300px !important;
-            z-index: 1 !important;
-            font-size: 14px !important;
-            align-self: center !important;
-            grid-column: 1 !important;
-            grid-row: 2 !important;
-            justify-self: center !important;
+            /* Mobile-only: hide doctor/patient detail cards as requested */
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
           }
 
           /* Keep Join button and details card in clean vertical flow on mobile */
@@ -2006,11 +2001,7 @@ const VideoConsultation = () => {
           }
 
           .kauvery-participant-info {
-            display: block !important;
-            width: 100% !important;
-            max-width: 360px !important;
-            margin: 10px auto 0 auto !important;
-            clear: both !important;
+            display: none !important;
           }
 
           .kauvery-participant-info > div > div:first-child {

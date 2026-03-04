@@ -75,17 +75,13 @@
     margin-bottom: 10px !important;
   }
 
-  .kauvery-participant-info {
-    display: block !important;
-    clear: both !important;
-    margin-top: 10px !important;
-  }
-
-  .kauvery-participant-info > div > div:first-child {
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 12px !important;
-    align-items: stretch !important;
+  /* Mobile-only request: hide doctor/patient details card on pre-join */
+  .kauvery-participant-info,
+  .kauvery-floating-info {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
 
   /* In-room mobile: keep call controls + chat visible */
@@ -109,6 +105,24 @@
   body.kauvery-in-call .kauvery-floating-info,
   body.kauvery-in-call .kauvery-participant-info {
     display: none !important;
+  }
+
+  /* Prevent page footer from covering Zego in-call toolbar/chat on mobile */
+  body.kauvery-in-call .consultation-footer {
+    display: none !important;
+  }
+
+  body.kauvery-in-call .video-consultation-page {
+    overflow: auto !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+  }
+
+  body.kauvery-in-call .zego-video-container {
+    height: calc(100dvh - 56px) !important;
+    min-height: calc(100dvh - 56px) !important;
+    max-height: calc(100dvh - 56px) !important;
+    padding-bottom: 0 !important;
   }
   .video-leave-popup {
     padding: 16px !important;
