@@ -1142,6 +1142,21 @@ const VideoConsultation = () => {
         if (existingFloatingInfo) {
           existingFloatingInfo.remove();
         }
+
+        // Mobile-only: keep only Join button, do not render Doctor/Patient details card
+        const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
+        if (isMobileViewport) {
+          if (joinButton) {
+            joinButton.style.display = 'block';
+            joinButton.style.visibility = 'visible';
+            joinButton.style.opacity = '1';
+            joinButton.style.pointerEvents = 'auto';
+            joinButton.style.width = '100%';
+            joinButton.style.maxWidth = '360px';
+            joinButton.style.margin = '12px auto';
+          }
+          return;
+        }
         
         // Create participant info section with higher z-index and more prominent styling
         const participantInfo = document.createElement('div');
