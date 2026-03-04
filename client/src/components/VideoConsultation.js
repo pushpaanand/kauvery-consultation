@@ -936,6 +936,12 @@ const VideoConsultation = () => {
 
   }, [zegoInitialized, appointmentData]);
 
+  // Styling marker: in-call mode (used by mobile CSS to keep controls/chat visible)
+  useEffect(() => {
+    document.body.classList.toggle('kauvery-in-call', Boolean(zegoInitialized));
+    return () => document.body.classList.remove('kauvery-in-call');
+  }, [zegoInitialized]);
+
   // Add this useEffect to log when appointmentData changes
   useEffect(() => {
     if (appointmentData && Object.keys(appointmentData).length > 0) {
@@ -1719,8 +1725,10 @@ const VideoConsultation = () => {
           box-shadow: none !important;
         }
         
-        /* Nuclear option - remove borders from everything */
-        * {
+        /* Keep border reset scoped to pre-join only */
+        .zego-prejoin-view *,
+        .zego-prejoin-container *,
+        .zego-prejoin * {
           border: none !important;
           border-width: 0 !important;
           border-style: none !important;
@@ -1741,8 +1749,8 @@ const VideoConsultation = () => {
         /* Global fitting styles */
         html, body {
           max-width: 100vw !important;
-          max-height: 100vh !important;
-          overflow: hidden !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
           box-sizing: border-box !important;
         }
 
@@ -1985,6 +1993,31 @@ const VideoConsultation = () => {
             grid-column: 1 !important;
             grid-row: 2 !important;
             justify-self: center !important;
+          }
+
+          /* Keep Join button and details card in clean vertical flow on mobile */
+          .zego-prejoin-view button,
+          .zego-prejoin-view [class*="button"],
+          .zego-prejoin-view [class*="join"] {
+            width: 100% !important;
+            max-width: 360px !important;
+            margin: 12px auto 10px auto !important;
+            display: block !important;
+          }
+
+          .kauvery-participant-info {
+            display: block !important;
+            width: 100% !important;
+            max-width: 360px !important;
+            margin: 10px auto 0 auto !important;
+            clear: both !important;
+          }
+
+          .kauvery-participant-info > div > div:first-child {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 12px !important;
           }
           
           .kauvery-participant-info h3,
@@ -2288,8 +2321,8 @@ const VideoConsultation = () => {
                   });
                 }, 500);
 
-                // Check for Zego quit/end call elements and hide them
-                const quitElements = node.querySelectorAll ? node.querySelectorAll('[class*="quit"], [class*="Quit"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"]') : [];
+                // Hide only full-screen quit/leave views (do not hide in-room controls)
+                const quitElements = node.querySelectorAll ? node.querySelectorAll('[class*="quit-view"], [class*="quitView"], [class*="leave-view"], [class*="leaveView"]') : [];
                 quitElements.forEach(element => {
                   element.style.display = 'none';
                   element.style.visibility = 'hidden';
@@ -2297,8 +2330,8 @@ const VideoConsultation = () => {
                   element.style.pointerEvents = 'none';
                 });
 
-                // Check for end call buttons and redirect them to our handler
-                const endCallButtons = node.querySelectorAll ? node.querySelectorAll('button, [class*="button"], [class*="btn"], [class*="end"], [class*="End"], [class*="leave"], [class*="Leave"], [class*="quit"], [class*="Quit"]') : [];
+                // Rewire only explicit leave/end text buttons (avoid icon buttons for mic/video/chat)
+                const endCallButtons = node.querySelectorAll ? node.querySelectorAll('button, [class*="button"], [class*="btn"]') : [];
                 endCallButtons.forEach(button => {
                   if (button.textContent && (
                     button.textContent.toLowerCase().includes('end call') ||
@@ -2325,17 +2358,20 @@ const VideoConsultation = () => {
                   }
                 });
 
-                // Hide any Zego popups that appear
+                // Hide only leave confirmation popups; keep chat/toolbar overlays
                 if (node.className && (
                   node.className.toLowerCase().includes('popup') ||
                   node.className.toLowerCase().includes('modal') ||
                   node.className.toLowerCase().includes('dialog') ||
                   node.className.toLowerCase().includes('overlay')
                 )) {
-                  node.style.display = 'none';
-                  node.style.visibility = 'hidden';
-                  node.style.opacity = '0';
-                  node.style.pointerEvents = 'none';
+                  const popupText = (node.textContent || '').toLowerCase();
+                  if (popupText.includes('leave the room') || popupText.includes('are you sure')) {
+                    node.style.display = 'none';
+                    node.style.visibility = 'hidden';
+                    node.style.opacity = '0';
+                    node.style.pointerEvents = 'none';
+                  }
                 }
 
                 // Check for text that indicates call ended
