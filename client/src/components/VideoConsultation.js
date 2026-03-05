@@ -3477,7 +3477,7 @@ const VideoConsultation = () => {
       }
     } catch (e) {
     }
-    window.location.href = 'https://kauveryhospital.com';
+    window.location.href = 'https://www.kauveryhospital.com';
   };
 
   // Function to track video call events
